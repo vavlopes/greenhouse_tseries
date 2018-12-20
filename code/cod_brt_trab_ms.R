@@ -4,6 +4,7 @@ library(parallel)
 library(parallelMap)
 
 rm(list = ls())
+gc()
 
 years = c("2014","2013","2012","2015")
 

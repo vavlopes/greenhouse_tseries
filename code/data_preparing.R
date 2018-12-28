@@ -1,0 +1,57 @@
+library(tidyverse)
+
+rm(list = ls())
+gc()
+
+#Verifying all files to be modified
+
+files_tbmod = list.files('../../data//',
+                         full.names = T)
+
+
+# Reading_data ------------------------------------------------------------
+
+#reading and storing all files from files_tbmod
+#cleaning columns and creatig concat coordinates for future filtering
+df_list = lapply(files_tbmod, 
+                 function(x) read_delim(x, delim = ",",col_names = TRUE) %>% 
+                   select(-X1) %>% 
+                   select(-(Lateral_plastico:Meio_poroso)) %>%
+                   mutate(concat_coord = paste0(as.character(x),as.character(y),as.character(z))) %>% 
+                   as.data.frame())
+
+# creating look back for time series prediction
+look_back = function(df, colNames, lags = 1:10){
+  n = nrow(df)
+  vet_names = colNames
+  for(lag in lags){
+    for(col in vet_names){
+      new_col = paste0(col,lag)
+      row_range_in = 1:(n-lag)
+      df[,new_col] = c(rep(NA,lag), unname(df[row_range_in,col]))
+    }
+  }
+  return(df)
+}
+
+#Function to apply look back
+apply_lback = function(df){
+  
+  #criando campo concatenado para filtro
+  unique_coords = unique(df$concat_coord)
+  
+  dfi = list()
+  #defining columns to be lagged
+  col_lagged = c("temp","ur")
+  for(xyz in unique_coords){
+    dfi[[xyz]] = df %>% filter(concat_coord == xyz)
+    dfi[[xyz]] = look_back(dfi[[xyz]], col_lagged)
+  }
+  
+  df = do.call(bind_rows, dfi)
+  sortedNames = sort(colnames(df))
+  df = df[c(sortedNames)]
+  
+  save
+  
+}

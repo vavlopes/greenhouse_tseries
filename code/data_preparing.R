@@ -5,7 +5,7 @@ gc()
 
 #Verifying all files to be modified
 
-files_tbmod = list.files('../../data//',
+files_tbmod = list.files('../../data_raw/',
                          full.names = T)
 
 
@@ -41,8 +41,11 @@ apply_lback = function(df){
   unique_coords = unique(df$concat_coord)
   
   dfi = list()
+  
   #defining columns to be lagged
   col_lagged = c("temp","ur")
+  
+  # for filtering and lagging for each coordinate
   for(xyz in unique_coords){
     dfi[[xyz]] = df %>% filter(concat_coord == xyz)
     dfi[[xyz]] = look_back(dfi[[xyz]], col_lagged)
@@ -52,6 +55,8 @@ apply_lback = function(df){
   sortedNames = sort(colnames(df))
   df = df[c(sortedNames)]
   
-  save
+  save(df, file = paste0("../../data/df",min(df$data),".RData"))
   
 }
+
+sapply(df_list, function(x) apply_lback(x))

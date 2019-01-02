@@ -1,4 +1,5 @@
 library(tidyverse)
+library(gtools) #for ordering names
 
 rm(list = ls())
 gc()
@@ -21,12 +22,12 @@ df_list = lapply(files_tbmod,
                    as.data.frame())
 
 # creating look back for time series prediction
-look_back = function(df, colNames, lags = 1:10){
+look_back = function(df, colNames, lags = 1:6){ #data until one hour back
   n = nrow(df)
   vet_names = colNames
   for(lag in lags){
     for(col in vet_names){
-      new_col = paste0(col,lag)
+      new_col = paste0(col,"_prev_",lag)
       row_range_in = 1:(n-lag)
       df[,new_col] = c(rep(NA,lag), unname(df[row_range_in,col]))
     }
@@ -43,20 +44,22 @@ apply_lback = function(df){
   dfi = list()
   
   #defining columns to be lagged
-  col_lagged = c("temp","ur")
-  
-  # for filtering and lagging for each coordinate
+  col_lagged = df %>% 
+    select(-c(data,hora,medicao, x, y, z, cenario, concat_coord, range_datas)) %>% 
+    colnames()
+
+  # for filtering and lagging for each coordinate (on columns previously selected)
   for(xyz in unique_coords){
     dfi[[xyz]] = df %>% filter(concat_coord == xyz)
     dfi[[xyz]] = look_back(dfi[[xyz]], col_lagged)
   }
   
   df = do.call(bind_rows, dfi)
-  sortedNames = sort(colnames(df))
+  sortedNames = mixedsort(colnames(df))
   df = df[c(sortedNames)]
   
   save(df, file = paste0("../../data/df",min(df$data),".RData"))
-  
+  return(df)
 }
 
-sapply(df_list, function(x) apply_lback(x))
+a = lapply(df_list, function(x) apply_lback(x))

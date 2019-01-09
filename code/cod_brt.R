@@ -56,9 +56,9 @@ make_forecast_brt = function(file, hmlook_back, target){
   )
   
   # especifica que usaremos uma busca aleatoria
-  ctrl = makeTuneControlRandom(maxit = 1L)
+  ctrl = makeTuneControlRandom(maxit = 50L)
   
-  #parallelStart(mode = 'multicore', cpus = 10, level = 'mlr.tuneParams')
+  parallelStart(mode = 'multicore', cpus = 12, level = 'mlr.tuneParams')
   
   # cria um learner de regressao com gbm, que faz o preprocessing de criar variaveis dummy
   base_learner = makeDummyFeaturesWrapper("regr.gbm")
@@ -71,16 +71,17 @@ make_forecast_brt = function(file, hmlook_back, target){
   r = resample(lrn, regr_task, resampling = rval, extract = getTuneResult, show.info = TRUE, 
                models=TRUE, measures = mae) 
   
-  #parallelStop()
+  parallelStop()
   
   dat_pars = generateHyperParsEffectData(r,partial.dep = TRUE)
   
-  write.table(r$measures.test,paste0("../../results/brt/mae_final/mae_",cenario,"_",hmlook_back,".txt"))
+  write.table(r$measures.test,paste0("../../results/brt/mae_final/mae_",target,"_",cenario,"_",hmlook_back,".txt"))
   resu = r$pred$data
+  resu$target = target
   resu$cenario = cenario
   resu$hmlook_back = hmlook_back
-  write.table(resu,paste0("../../results/brt/ypred/ypred_",cenario,"_",hmlook_back,".txt"))
-  write.table(dat_pars$data,paste0("../../results/brt/cv/cv_",cenario,"_",hmlook_back,".txt"))
+  write.table(resu,paste0("../../results/brt/ypred/ypred_",target,"_",cenario,"_",hmlook_back,".txt"))
+  write.table(dat_pars$data,paste0("../../results/brt/cv/cv_",target,"_",cenario,"_",hmlook_back,".txt"))
 }
 
 

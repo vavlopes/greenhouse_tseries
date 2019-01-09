@@ -1,8 +1,19 @@
 library(tidyverse)
 library(gtools) #for ordering names
+library(reticulate)
 
 rm(list = ls())
 gc()
+
+# Saving files into pickle format -----------------------------------------
+py_save_object <- function(object, filename, pickle = "pickle") {
+  builtins <- import_builtins()
+  pickle <- import(pickle)
+  handle <- builtins$open(filename, "wb")
+  on.exit(handle$close(), add = TRUE)
+  pickle$dump(object, handle, protocol = pickle$HIGHEST_PROTOCOL)
+}
+
 
 #Verifying all files to be modified
 
@@ -59,7 +70,10 @@ apply_lback = function(df){
   df = df[c(sortedNames)]
   
   save(df, file = paste0("../../data/df",min(df$data),".RData"))
+  py_save_object(df, paste0("../../data/df",min(df$data),",pickle"), pickle = "pickle")
   return(df)
 }
 
 a = lapply(df_list, function(x) apply_lback(x))
+
+

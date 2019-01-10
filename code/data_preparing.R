@@ -26,7 +26,7 @@ files_tbmod = list.files('../../data_raw/',
 #reading and storing all files from files_tbmod
 #cleaning columns and creatig concat coordinates for future filtering
 df_list = lapply(files_tbmod, 
-                 function(x) read_delim(x, delim = ",",col_names = TRUE) %>% 
+                 function(x) read_delim(x, delim = ",",col_names = TRUE,trim_ws = T) %>% 
                    select(-X1) %>% 
                    select(-(Lateral_plastico:Meio_poroso)) %>%
                    mutate(concat_coord = paste0(as.character(x),as.character(y),as.character(z))) %>% 
@@ -70,7 +70,7 @@ apply_lback = function(df){
   df = df[c(sortedNames)]
   
   save(df, file = paste0("../../data/df",min(df$data),".RData"))
-  py_save_object(df, paste0("../../data/df",min(df$data),",pickle"), pickle = "pickle")
+  py_save_object(df, paste0("../../data/df",min(df$data),".pickle"), pickle = "pickle")
   return(df)
 }
 

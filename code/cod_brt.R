@@ -87,7 +87,8 @@ make_forecast_brt = function(file, hmlook_back, target){
 
 #collectiong data to be modeled
 files_tbmodel = list.files('../../data/',
-                           full.names = T)
+                           full.names = T,
+                           pattern = ".RData")
 
 target = c("ur","temp")
 hmlook_back = seq(1:6)

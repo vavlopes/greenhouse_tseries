@@ -18,21 +18,25 @@ X = df.filter(regex = 'x|y|z').values
 X = X.astype(str)
 
 def procLabel_col(c):
+    """ Transforma as colunas objeto/label em one hot encoding """
     Enc = LabelEncoder()
     c = Enc.fit_transform(c)
     OneHot = OneHotEncoder()
     X_encoded = OneHot.fit_transform(c.reshape(-1,1)).toarray()
     return(X_encoded)
 
+colunas_str = []
 for col in range(X.shape[1]):
-    X[:,col] = procLabel_col(X[:,col])
+    colunas_str.append(procLabel_col(X[:,col]))
+
+df = np.hstack((colunas_str[0],colunas_str[1],colunas_str[2]))
+df
 
 
-a = procLabel_col(c = X[:,0])
-b = procLabel_col(c = X[:,1])
-c = procLabel_col(c = X[:,2])
 
-np.hstack((a,b,c)).shape
+
+
+
 
 
 

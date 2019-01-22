@@ -2,12 +2,17 @@ import os
 import pandas as pd
 import pickle
 import numpy as np
+from matplotlib import pyplot
 from sklearn.preprocessing import OneHotEncoder, LabelEncoder, MinMaxScaler
 import itertools
+from keras.models import Sequential
+from keras.layers import Dense
+from keras.layers import LSTM
+from keras import regularizers
 
 # Variaveis globais
 target = 'ur'
-hmlook_back = 6
+hmlook_back = 5
 
 os.chdir('C:\\Users\\vinic\\Google Drive\\Mestrado\\pratical_project\\variability_part2\\greenhouse_tseries\\code')
 
@@ -15,26 +20,34 @@ os.chdir('C:\\Users\\vinic\\Google Drive\\Mestrado\\pratical_project\\variabilit
 with open("../../data/df2014-06-15.pickle",'rb') as infile:
     df = pickle.load(infile)
     df = df = df.sort_values(by=['data','hora'])
+    #Holding values for results presentation
     cenario = df.cenario.unique().tolist()
+    range_datas = df.range_datas.unique().tolist()
 
 def data_preparing(df,hmlook_back,target):
     #cleaning and selecting the right columns
-    #also split df into X and Y
     vet = ['prev_'+i for i in map(str,list(range(hmlook_back, (6+1), 1)))]
     vet.extend((#'x','y','z',
                 'data','hora','medicao',
                 'concat_coord', 'range_datas',
                 target))
     names = "|".join(vet)
+    names
     df = df.filter(regex= names, axis=1)
-    df = df.dropna(0)  #mantaining only the complete cases
+    #For cleaning variables that contains target in its name (ur_prev or temp_prev)
+    if hmlook_back != 1:
+        vet_exclude = ['prev_'+i for i in map(str,list(range(1, (hmlook_back), 1)))]
+        names_exclude = "|".join(vet_exclude)
+        df = df.drop(df.filter(regex= names_exclude, axis = 1).columns, axis = 1)
+    #mantaining only the complete cases
+    df = df.dropna(0)
     return(df)
 
 def Holdout_split(df):
     datas = df.data.unique()
     datas = sorted(datas)
-    train = df.loc[df.data < datas[7],:]
-    test = df.loc[df.data >= datas[7],:]
+    train = df.loc[df.data < datas[7],]
+    test = df.loc[df.data >= datas[7],]
     return(train, test)
 
 def procLabel_col(c):
@@ -85,13 +98,47 @@ def create_indexcol(X_train):
 df = data_preparing(df,hmlook_back,target)
 concat_coord = df.concat_coord.unique().tolist()
 df = df.loc[df.concat_coord == concat_coord[0],:]
-df = df.loc[:, df.columns != 'concat_coord']
+df = df.drop(['concat_coord'], axis = 1)
 train, test = Holdout_split(df)
 X_train, X_test, y_train, y_test = scaleNum_col(train, test)
-X_train = create_indexcol(X_train)
-print(pd.DataFrame(X_train))
+#X_train = create_indexcol(X_train)
+#print(pd.DataFrame(X_train))
+
+n_features = int(X_train.shape[1]/(7-hmlook_back))
 
 
+def reshape_data(X_train, X_test, y_train, y_test):
+
+    X_train = X_train.reshape(X_train.shape[0],(7-hmlook_back),n_features)
+    X_test = X_test.reshape(X_test.shape[0],(7-hmlook_back),n_features)
+    y_train = y_train.reshape(y_train.shape[0],)
+    y_test = y_test.reshape(y_test.shape[0],)
+
+    return(X_train, X_test, y_train, y_test)
+
+
+def modeling_LSTM(X_train, X_test, y_train, y_test):
+    model = Sequential()
+    model.add(LSTM(100, kernel_regularizer=regularizers.l2(0.01), input_shape=(X_train.shape[1], X_train.shape[2]))) #input_shape = (time_step, number of features)
+    model.add(Dense(1,activity_regularizer=regularizers.l1(0.01)))
+    model.compile(loss='mse', optimizer='adam', metrics=['mae']) #alterei para adpatar para classificacao
+    # fit network
+    # it could be good to use a batch size equal to the number of registers per "matricula" (maybe use the mean)
+    history = model.fit(X_train, y_train, epochs=1000, batch_size=1, validation_data=(X_test, y_test), verbose=2, shuffle=False)
+    # plot history
+    pyplot.plot(history.history['loss'], label='train')
+    pyplot.plot(history.history['val_loss'], label='test')
+    pyplot.legend()
+    pyplot.show()
+
+    yhat = model.predict(X_test)
+    return(yhat)
+
+X_train, X_test, y_train, y_test = reshape_data(X_train, X_test, y_train, y_test)
+yhat = modeling_LSTM(X_train, X_test, y_train, y_test)
+
+
+#def mounting_results(yhat):
 
 
 

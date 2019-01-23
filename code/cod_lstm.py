@@ -4,7 +4,9 @@ import pickle
 import numpy as np
 from matplotlib import pyplot
 from sklearn.preprocessing import OneHotEncoder, LabelEncoder, MinMaxScaler
+from sklearn.model_selection import GroupKFold, cross_val_score
 import itertools
+from keras.wrappers.scikit_learn import KerasRegressor
 from keras.models import Sequential
 from keras.layers import Dense
 from keras.layers import LSTM
@@ -12,7 +14,7 @@ from keras import regularizers
 
 # Variaveis globais
 target = 'ur'
-hmlook_back = 5
+hmlook_back = 6
 
 os.chdir('C:\\Users\\vinic\\Google Drive\\Mestrado\\pratical_project\\variability_part2\\greenhouse_tseries\\code')
 
@@ -88,11 +90,11 @@ def scaleNum_col(train,test):
     return(X_train, X_test, y_train, y_test)
 
 def create_indexcol(X_train):
-    indexes = np.repeat(range(1,(10+1),1), np.ceil(X_train.shape[0]/10))
+    indexes = np.repeat(range(1,(5+1),1), np.ceil(X_train.shape[0]/5))
     indexes = indexes[:(X_train.shape[0])]
     #Adding column 17 for filter during Cross validation
-    X_train = np.hstack((X_train,indexes.reshape(-1,1)))
-    return(X_train)
+    #X_train = np.hstack((X_train,indexes.reshape(-1,1)))
+    return(indexes)
 
 #procedural part that needs to be upgraded
 df = data_preparing(df,hmlook_back,target)
@@ -117,11 +119,37 @@ def reshape_data(X_train, X_test, y_train, y_test):
     return(X_train, X_test, y_train, y_test)
 
 
-def modeling_LSTM(X_train, X_test, y_train, y_test):
+X_train, X_test, y_train, y_test = reshape_data(X_train, X_test, y_train, y_test)
+a,b = X_train.shape[1], X_train.shape[2]
+def modeling_LSTM(a,b):
+    #global a,b
     model = Sequential()
-    model.add(LSTM(100, kernel_regularizer=regularizers.l2(0.01), input_shape=(X_train.shape[1], X_train.shape[2]))) #input_shape = (time_step, number of features)
+    model.add(LSTM(100, kernel_regularizer=regularizers.l2(0.01), input_shape=(a,b))) #input_shape = (time_step, number of features)
     model.add(Dense(1,activity_regularizer=regularizers.l1(0.01)))
     model.compile(loss='mse', optimizer='adam', metrics=['mae']) #alterei para adpatar para classificacao
+    return model
+
+estimator = KerasRegressor(build_fn = modeling_LSTM, a = a, b = b, epochs = 10, batch_size = 2, verbose = 0)
+indexes = create_indexcol(X_train)
+group_kfold = GroupKFold(n_splits=5)
+#y_train = y_train.reshape(y_train.shape[0],)
+group_kfold = group_kfold.split(X_train, y_train, groups = indexes)
+gkf = list(group_kfold)
+results = cross_val_score(estimator, X_train, y_train, cv = gkf)
+
+results
+
+
+gkf
+X_train.shape
+y_train.shape
+#group_kfold = group_kfold.split(X_train, y_train, groups = indexes)
+
+
+
+
+
+
     # fit network
     # it could be good to use a batch size equal to the number of registers per "matricula" (maybe use the mean)
     history = model.fit(X_train, y_train, epochs=1000, batch_size=1, validation_data=(X_test, y_test), verbose=2, shuffle=False)
@@ -133,6 +161,8 @@ def modeling_LSTM(X_train, X_test, y_train, y_test):
 
     yhat = model.predict(X_test)
     return(yhat)
+
+
 
 X_train, X_test, y_train, y_test = reshape_data(X_train, X_test, y_train, y_test)
 yhat = modeling_LSTM(X_train, X_test, y_train, y_test)

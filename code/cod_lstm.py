@@ -15,6 +15,7 @@ from sklearn.preprocessing import OneHotEncoder, LabelEncoder, MinMaxScaler, Sta
 from sklearn.model_selection import GroupKFold, cross_val_score, cross_validate, ParameterGrid, GridSearchCV
 from sklearn.compose import TransformedTargetRegressor
 from sklearn.pipeline import Pipeline
+from sklearn.metrics import mean_absolute_error
 import itertools
 from keras.wrappers.scikit_learn import KerasRegressor
 from keras.models import Sequential
@@ -85,18 +86,10 @@ def apply_EncLabel_col(df):
 def scaleNum_col(train,test):
     """ Function to apply min max scaling to numeric variables """
     #This function needs to normalize each train and test for each concat_coord
-    scaler_x = MinMaxScaler()
     X_train = train.drop([target,'data','hora','medicao','range_datas'], axis=1)
     X_test = test.drop([target,'data','hora','medicao','range_datas'], axis=1)
-    scaler_x.fit(X_train)
-    X_train = scaler_x.transform(X_train)
-    X_test = scaler_x.transform(X_test)
-    scaler_y = MinMaxScaler()
     y_train = train[target].values.reshape(-1,1)
     y_test = test[target].values.reshape(-1,1)
-    scaler_y.fit(y_train)
-    y_train = scaler_y.transform(y_train)
-    y_test = scaler_y.transform(y_test)
     return(X_train, X_test, y_train, y_test)
 
 def create_indexcol(X_train):
@@ -105,15 +98,6 @@ def create_indexcol(X_train):
     #Adding column 17 for filter during Cross validation
     #X_train = np.hstack((X_train,indexes.reshape(-1,1)))
     return(indexes)
-
-#procedural part that needs to be upgraded
-df = data_preparing(df,hmlook_back,target)
-concat_coord = df.concat_coord.unique().tolist()
-df = df.loc[df.concat_coord == concat_coord[0],:]
-df = df.drop(['concat_coord'], axis = 1)
-train, test = Holdout_split(df)
-X_train, X_test, y_train, y_test = scaleNum_col(train, test)
-#print(pd.DataFrame(X_train))
 
 def reshape_data(X_train, X_test, y_train, y_test):
 
@@ -125,135 +109,55 @@ def reshape_data(X_train, X_test, y_train, y_test):
 
     return(X_train, X_test, y_train, y_test)
 
+
+#procedural part that needs to be upgraded
+df = data_preparing(df,hmlook_back,target)
+concat_coord = df.concat_coord.unique().tolist()
+df = df.loc[df.concat_coord == concat_coord[0],:]
+df = df.drop(['concat_coord'], axis = 1)
+train, test = Holdout_split(df)
+X_train, X_test, y_train, y_test = scaleNum_col(train, test)
 X_train, X_test, y_train, y_test = reshape_data(X_train, X_test, y_train, y_test)
-time_step, n_features = X_train.shape[1], X_train.shape[2]
-def modeling_LSTM():
-    model = Sequential()
-    model.add(LSTM(100, kernel_regularizer=regularizers.l2(0.01)))#, input_shape=(time_step, n_features))) #input_shape = (time_step, number of features)
-    model.add(Dense(1,activity_regularizer=regularizers.l1(0.01)))
-    model.compile(loss='mse', optimizer='adam', metrics=['mae'])
-    return model
-
-estimator = KerasRegressor(build_fn = modeling_LSTM, time_step = time_step, n_features = n_features, epochs = 10, batch_size = 2, verbose = 2)
-
-#transformer = MinMaxScaler()
-#regr = TransformedTargetRegressor(regressor = estimator, transformer = transformer)
-indexes = create_indexcol(X_train)
-group_kfold = GroupKFold(n_splits=5)
-group_kfold = group_kfold.split(X_train, y_train, groups = indexes)
-gkf = list(group_kfold)
 grid = [{'epochs': [10,20], 'batch_size': [5,10]}]
 grid = ParameterGrid(grid)
-resultados = []
+
+#X and y here are suposed to be train X and y
+def cros_val_own(X, y,epoch,batch_size):
+    indexes = create_indexcol(X)
+    group_kfold = GroupKFold(n_splits=5)
+    cvscores = []
+    for train_id, test_id in group_kfold.split(X, y, groups = indexes):
+        time_step, n_features = X.shape[1], X.shape[2]
+        # create model
+        model = Sequential()
+        model.add(LSTM(100, kernel_regularizer=regularizers.l2(0.01),input_shape=(time_step, n_features))) #input_shape = (time_step, number of features)
+        model.add(Dense(1,activity_regularizer=regularizers.l1(0.01)))
+        model.compile(loss='mse', optimizer='adam', metrics=['mae'])
+
+        scaler_x = MinMaxScaler()
+        scaler_x.fit(X[train])
+        x_split_train = scaler_x.transform(X[train])
+        x_split_test = scaler_x.transform(X[train])
+
+        scaler_y = MinMaxScaler()
+        scaler_y.fit(y[train])
+        y_split_train = scaler_y.transform(y[train])
+
+        # Fit the model
+        model.fit(x_split_train,
+                  y_split_train,epochs=epoch,batch_size=batch_size,verbose=2)
+    	# evaluate the model
+        yhat = model.predict(x_split_test,verbose=0)
+        yhat = scale_y.inverse_transform(yhat)
+        mae = mean_absolute_error(y[test], yhat)
+
+        print(mae)
+        resultados_part = (mae,batch_size,epoch)
+        cvscores.append(resultados_part)
+    return(cvscores)
+
 for i in range(len(list(grid))):
-    results = cross_val_score(estimator, X_train, y_train, fit_params = list(grid)[i], cv = gkf, scoring='neg_mean_absolute_error')
-    resultados_part = (np.mean(results),list(grid)[i]['batch_size'],list(grid)[i]['epochs'])
-    resultados.append(resultados_part)
-
-#svc = make_pipeline(StandardScaler(), svm.SVC(C=1.0, kernel="linear"))
-#a = cross_validate(svc, x, y, cv = list(group_kfold), scoring='f1')
-a = pd.DataFrame(resultados,columns=['score', 'batch_size', 'epochs'])
-
-b = a.sort_values('score', ascending  = True).iloc[1,:]
-print(b)
-
-# group_kfold = GroupKFold(n_splits=5)
-# group_kfold = group_kfold.split(X_train, y_train, groups = indexes)
-# cvscores = []
-# for train, test in kfold.split(X, Y):
-#   # create model
-#     model = Sequential()
-#     model.add(LSTM(100, kernel_regularizer=regularizers.l2(0.01)))#, input_shape=(time_step, n_features))) #input_shape = (time_step, number of features)
-#     model.add(Dense(1,activity_regularizer=regularizers.l1(0.01)))
-#     model.compile(loss='mse', optimizer='adam', metrics=['mae'])
-#
-#
-#     # Fit the model
-# 	model.fit(X[train], Y[train], epochs=150, batch_size=10, verbose=0)
-# 	# evaluate the model
-# 	scores = model.evaluate(X[test], Y[test], verbose=0)
-# 	print("%s: %.2f%%" % (model.metrics_names[1], scores[1]*100))
-# 	cvscores.append(scores[1] * 100)
+    cros_val_own(X, y,epoch = list(grid)[i]['epochs'],batch_size = list(grid)[i]['batch_size'])
 
 
-
-
-
-#one possible solution
-# def drop_nans(X, y=None):
-#     total = X.shape[1]
-#     new_thresh = total - thresh
-#     df = pd.DataFrame(X)
-#     df.dropna(thresh=new_thresh, inplace=True)
-#     return df.values
-
-#transformer = FunctionTransformer(drop_nans, validate=False)
-
-
-
-
-
-#
-# import tensorflow as tf
-# sess = tf.Session(config=tf.ConfigProto(log_device_placement=True))
-#
-# from tensorflow.python.client import device_lib
-# print(device_lib.list_local_devices())
-#
-# from keras import backend as K
-# K.tensorflow_backend._get_available_gpus()
-#
-# import keras
-# config = tf.ConfigProto( device_count = {'GPU': 1 , 'CPU': 4} )
-# sess = tf.Session(config=config)
-# keras.backend.set_session(sess)
-
-
-
-
-
-
-
-#array([-0.07965646, -0.07173461, -0.06853584, -0.05444147, -0.07200295])
-
-#     # fit network
-#     # it could be good to use a batch size equal to the number of registers per "matricula" (maybe use the mean)
-#     history = model.fit(X_train, y_train, epochs=1000, batch_size=1, validation_data=(X_test, y_test), verbose=2, shuffle=False)
-#     # plot history
-#     pyplot.plot(history.history['loss'], label='train')
-#     pyplot.plot(history.history['val_loss'], label='test')
-#     pyplot.legend()
-#     pyplot.show()
-#
-#     yhat = model.predict(X_test)
-#     return(yhat)
-#
-#
-#
-# X_train, X_test, y_train, y_test = reshape_data(X_train, X_test, y_train, y_test)
-# yhat = modeling_LSTM(X_train, X_test, y_train, y_test)
-
-
-#def mounting_results(yhat):
-
-
-
-
-
-
-
-#Function for data standardizing
-#
-# Enc = LabelEncoder()
-# X[:,0] = Enc.fit_transform(X[:,0])
-# X[:,1] = Enc.fit_transform(X[:,1])
-# X[:,2] = Enc.fit_transform(X[:,2])
-# OneHot = OneHotEncoder()
-# X_encoded = OneHot.fit_transform(X[:,1].reshape(-1,1)).toarray()
-# decoded = X_encoded.dot(OneHot.active_features_).astype(int)
-#
-# X[:,1]
-#
-# Enc.inverse_transform(decoded.any())
-#
-# X[:,1]
+#ver o que retornar e como montar o resultado

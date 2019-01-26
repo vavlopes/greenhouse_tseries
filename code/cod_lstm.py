@@ -90,7 +90,7 @@ def scaleNum_col(train,test):
     X_test = test.drop([target,'data','hora','medicao','range_datas'], axis=1)
     y_train = train[target].values.reshape(-1,1)
     y_test = test[target].values.reshape(-1,1)
-    return(X_train, X_test, y_train, y_test)
+    return(X_train.values, X_test.values, y_train, y_test)
 
 def create_indexcol(X_train):
     indexes = np.repeat(range(1,(5+1),1), np.ceil(X_train.shape[0]/5))
@@ -99,15 +99,13 @@ def create_indexcol(X_train):
     #X_train = np.hstack((X_train,indexes.reshape(-1,1)))
     return(indexes)
 
-def reshape_data(X_train, X_test, y_train, y_test):
+def reshape_data(X_train, y_train):
 
-    n_features = int(X_train.shape[1]/(7-hmlook_back))
+    n_features = int(X_train.shape[1]/(7-hmlook_back)) #calculo do numero de features
     X_train = X_train.reshape(X_train.shape[0],(7-hmlook_back),n_features)
-    X_test = X_test.reshape(X_test.shape[0],(7-hmlook_back),n_features)
     y_train = y_train.reshape(y_train.shape[0],)
-    y_test = y_test.reshape(y_test.shape[0],)
 
-    return(X_train, X_test, y_train, y_test)
+    return(X_train, y_train)
 
 
 #procedural part that needs to be upgraded
@@ -117,47 +115,75 @@ df = df.loc[df.concat_coord == concat_coord[0],:]
 df = df.drop(['concat_coord'], axis = 1)
 train, test = Holdout_split(df)
 X_train, X_test, y_train, y_test = scaleNum_col(train, test)
-X_train, X_test, y_train, y_test = reshape_data(X_train, X_test, y_train, y_test)
+#X_train, X_test, y_train, y_test = reshape_data(X_train, X_test, y_train, y_test)
 grid = [{'epochs': [10,20], 'batch_size': [5,10]}]
 grid = ParameterGrid(grid)
+
+#print(pd.DataFrame(X_train))
 
 #X and y here are suposed to be train X and y
 def cros_val_own(X, y,epoch,batch_size):
     indexes = create_indexcol(X)
     group_kfold = GroupKFold(n_splits=5)
     cvscores = []
-    for train_id, test_id in group_kfold.split(X, y, groups = indexes):
-        time_step, n_features = X.shape[1], X.shape[2]
-        # create model
-        model = Sequential()
-        model.add(LSTM(100, kernel_regularizer=regularizers.l2(0.01),input_shape=(time_step, n_features))) #input_shape = (time_step, number of features)
-        model.add(Dense(1,activity_regularizer=regularizers.l1(0.01)))
-        model.compile(loss='mse', optimizer='adam', metrics=['mae'])
+    for train, test in group_kfold.split(X, y, groups = indexes):
 
         scaler_x = MinMaxScaler()
         scaler_x.fit(X[train])
         x_split_train = scaler_x.transform(X[train])
-        x_split_test = scaler_x.transform(X[train])
+        x_split_test = scaler_x.transform(X[test])
 
         scaler_y = MinMaxScaler()
         scaler_y.fit(y[train])
         y_split_train = scaler_y.transform(y[train])
 
+        x_split_train, y_split_train = reshape_data(x_split_train, y_split_train)
+        time_step, n_features = x_split_train.shape[1],x_split_train.shape[2]
+
+        # create model
+        model = Sequential()
+        model.add(LSTM(100, kernel_regularizer=regularizers.l2(0.01),input_shape=(time_step, n_features)))
+        model.add(Dense(1,activity_regularizer=regularizers.l1(0.01)))
+        model.compile(loss='mse', optimizer='adam', metrics=['mae'])
+
         # Fit the model
-        model.fit(x_split_train,
-                  y_split_train,epochs=epoch,batch_size=batch_size,verbose=2)
+        model.fit(x_split_train,y_split_train,epochs=epoch,batch_size=batch_size,verbose=2)
+
+        x_split_test, y_split_test = reshape_data(x_split_test, y[test])
+
     	# evaluate the model
         yhat = model.predict(x_split_test,verbose=0)
-        yhat = scale_y.inverse_transform(yhat)
-        mae = mean_absolute_error(y[test], yhat)
-
+        yhat = scaler_y.inverse_transform(yhat)
+        yhat = yhat.reshape(yhat.shape[0],)
+        mae = mean_absolute_error(y_split_test, yhat)
+        mae
         print(mae)
         resultados_part = (mae,batch_size,epoch)
         cvscores.append(resultados_part)
+
     return(cvscores)
 
-for i in range(len(list(grid))):
-    cros_val_own(X, y,epoch = list(grid)[i]['epochs'],batch_size = list(grid)[i]['batch_size'])
+cvscores = cros_val_own(X_train, y_train,epoch = list(grid)[1]['epochs'],batch_size = list(grid)[1]['batch_size'])
 
+
+CV_scores = []
+for i in range(len(list(grid))):
+    CV_scores.append(cros_val_own(X_train, y_train,epoch = list(grid)[i]['epochs'],batch_size = list(grid)[i]['batch_size']))
+
+dat = pd.DataFrame()
+for i in range(len(CV_scores)):
+    dat = dat.append(pd.DataFrame(CV_scores[i],columns=['mae', 'batch_size','epoch']), ignore_index=True)
+
+#para guardar a melhor combinacao de hiperparametros
+best = dat.groupby(['batch_size','epoch']).mean().sort_values('mae')
+best = best['mae'].index[0]
+
+id = []
+idx = []
+for train, test in group_kfold.split(X, y, groups = indexes):
+    id.append(train)
+    idx.append(test)
+train = id[1]
+test = idx[1]
 
 #ver o que retornar e como montar o resultado

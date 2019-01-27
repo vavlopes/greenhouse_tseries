@@ -23,10 +23,6 @@ from keras.layers import Dense
 from keras.layers import LSTM
 from keras import regularizers
 
-# Variaveis globais
-target = 'ur'
-hmlook_back = 6
-
 os.chdir('C:\\Users\\vinic\\Google Drive\\Mestrado\\pratical_project\\variability_part2\\greenhouse_tseries\\code')
 
 #read all available files in a function (define)
@@ -45,13 +41,14 @@ def data_preparing(df,hmlook_back,target):
                 'concat_coord', 'range_datas',
                 target))
     names = "|".join(vet)
-    names
     df = df.filter(regex= names, axis=1)
     #For cleaning variables that contains target in its name (ur_prev or temp_prev)
     if hmlook_back != 1:
         vet_exclude = ['prev_'+i for i in map(str,list(range(1, (hmlook_back), 1)))]
         names_exclude = "|".join(vet_exclude)
         df = df.drop(df.filter(regex= names_exclude, axis = 1).columns, axis = 1)
+        if target == 'temp':
+            df = df.drop('temp_est_2', axis = 1)
     #mantaining only the complete cases
     df = df.dropna(0)
     return(df)
@@ -83,7 +80,7 @@ def apply_EncLabel_col(df):
     xyz = np.hstack((colunas_str[0],colunas_str[1],colunas_str[2]))
     return xyz
 
-def scaleNum_col(train,test):
+def manipulate_col(train,test):
     """ Function to apply min max scaling to numeric variables """
     #This function needs to normalize each train and test for each concat_coord
     X_train = train.drop([target,'data','hora','medicao','range_datas'], axis=1)
@@ -99,27 +96,20 @@ def create_indexcol(X_train):
     #X_train = np.hstack((X_train,indexes.reshape(-1,1)))
     return(indexes)
 
-def reshape_data(X_train, y_train):
+def reshape_data(X, y):
 
-    n_features = int(X_train.shape[1]/(7-hmlook_back)) #calculo do numero de features
-    X_train = X_train.reshape(X_train.shape[0],(7-hmlook_back),n_features)
-    y_train = y_train.reshape(y_train.shape[0],)
+    n_features = int(X.shape[1]/(7-hmlook_back)) #calculo do numero de features
+    X = X.reshape(X.shape[0],(7-hmlook_back),n_features) #samples,n_lag, n_features
+    y = y.reshape(y.shape[0],)
 
-    return(X_train, y_train)
+    return(X, y)
 
-
-#procedural part that needs to be upgraded
-df = data_preparing(df,hmlook_back,target)
-concat_coord = df.concat_coord.unique().tolist()
-df = df.loc[df.concat_coord == concat_coord[0],:]
-df = df.drop(['concat_coord'], axis = 1)
-train, test = Holdout_split(df)
-X_train, X_test, y_train, y_test = scaleNum_col(train, test)
-#X_train, X_test, y_train, y_test = reshape_data(X_train, X_test, y_train, y_test)
-grid = [{'epochs': [10,20], 'batch_size': [5,10]}]
-grid = ParameterGrid(grid)
-
-#print(pd.DataFrame(X_train))
+def lstm_model(dim,time_step, n_features):
+    model = Sequential()
+    model.add(LSTM(100, kernel_regularizer=regularizers.l2(0.01),input_shape=(time_step, n_features)))
+    model.add(Dense(1,activity_regularizer=regularizers.l1(0.01)))
+    model.compile(loss='mse', optimizer='adam', metrics=['mae'])
+    return (model)
 
 #X and y here are suposed to be train X and y
 def cros_val_own(X, y,epoch,batch_size):
@@ -139,51 +129,103 @@ def cros_val_own(X, y,epoch,batch_size):
 
         x_split_train, y_split_train = reshape_data(x_split_train, y_split_train)
         time_step, n_features = x_split_train.shape[1],x_split_train.shape[2]
-
         # create model
-        model = Sequential()
-        model.add(LSTM(100, kernel_regularizer=regularizers.l2(0.01),input_shape=(time_step, n_features)))
-        model.add(Dense(1,activity_regularizer=regularizers.l1(0.01)))
-        model.compile(loss='mse', optimizer='adam', metrics=['mae'])
-
+        model = lstm_model(dim = 100,time_step = time_step, n_features = n_features)
         # Fit the model
         model.fit(x_split_train,y_split_train,epochs=epoch,batch_size=batch_size,verbose=2)
-
         x_split_test, y_split_test = reshape_data(x_split_test, y[test])
-
     	# evaluate the model
         yhat = model.predict(x_split_test,verbose=0)
         yhat = scaler_y.inverse_transform(yhat)
         yhat = yhat.reshape(yhat.shape[0],)
         mae = mean_absolute_error(y_split_test, yhat)
-        mae
         print(mae)
         resultados_part = (mae,batch_size,epoch)
         cvscores.append(resultados_part)
 
     return(cvscores)
 
-cvscores = cros_val_own(X_train, y_train,epoch = list(grid)[1]['epochs'],batch_size = list(grid)[1]['batch_size'])
+def holdout_lstm(X_train,X_test, y_train, y_test,batch_size, epoch):
+    """ Description """
+    scaler_x = MinMaxScaler()
+    scaler_x.fit(X_train)
+    X_train = scaler_x.transform(X_train)
+    X_test = scaler_x.transform(X_test)
+
+    scaler_y = MinMaxScaler()
+    scaler_y.fit(y_train)
+    y_train = scaler_y.transform(y_train)
+    #reshaping data
+    X_train, y_train = reshape_data(X_train, y_train)
+    time_step, n_features = X_train.shape[1],X_train.shape[2]
+    model = lstm_model(dim = 100,time_step = time_step, n_features = n_features)
+    model.fit(X_train,y_train,epochs=epoch,batch_size=batch_size,verbose=2)
+    X_test, y_test = reshape_data(X_test, y_test)
+	# evaluate the model
+    yhat = model.predict(X_test,verbose=0)
+    yhat = scaler_y.inverse_transform(yhat)
+    yhat = yhat.reshape(yhat.shape[0],)
+    mae = mean_absolute_error(y_test, yhat)
+    print(mae)
+    resultados = (mae)
+    return(resultados, y_test, yhat)
 
 
-CV_scores = []
-for i in range(len(list(grid))):
-    CV_scores.append(cros_val_own(X_train, y_train,epoch = list(grid)[i]['epochs'],batch_size = list(grid)[i]['batch_size']))
+#definindo grid de CV
+grid = [{'epochs': [10,20,100], 'batch_size': [5,6,10,100]}]
+grid = ParameterGrid(grid)
 
-dat = pd.DataFrame()
-for i in range(len(CV_scores)):
-    dat = dat.append(pd.DataFrame(CV_scores[i],columns=['mae', 'batch_size','epoch']), ignore_index=True)
+# Variaveis globais
+df = df
+target = 'ur'
+hmlook_back = 6
 
-#para guardar a melhor combinacao de hiperparametros
-best = dat.groupby(['batch_size','epoch']).mean().sort_values('mae')
-best = best['mae'].index[0]
+#procedural part that needs to be upgraded
+df = data_preparing(df,hmlook_back,target)
+concat_coord_un = df.concat_coord.unique().tolist()
+res_comp = pd.DataFrame()
+for i in range(len(concat_coord_un)):
+    df = df.loc[df.concat_coord == concat_coord_un[i],:]
+    concat_coord = df.concat_coord.unique().tolist()
+    df = df.drop(['concat_coord'], axis = 1)
+    train, test = Holdout_split(df)
+    data = test.data.tolist()
+    hora = test.hora.tolist()
+    X_train, X_test, y_train, y_test = manipulate_col(train, test)
 
-id = []
-idx = []
-for train, test in group_kfold.split(X, y, groups = indexes):
-    id.append(train)
-    idx.append(test)
-train = id[1]
-test = idx[1]
+    #print(pd.DataFrame(X_train))
+    CV_scores = []
+    for i in range(len(list(grid))):
+        CV_scores.append(cros_val_own(X_train, y_train,epoch = list(grid)[i]['epochs'],batch_size = list(grid)[i]['batch_size']))
+
+    dat = pd.DataFrame()
+    for i in range(len(CV_scores)):
+        dat = dat.append(pd.DataFrame(CV_scores[i],columns=['mae', 'batch_size','epoch']), ignore_index=True)
+
+    #para guardar a melhor combinacao de hiperparametros
+    best = dat.groupby(['batch_size','epoch']).mean().sort_values('mae')
+    best = best['mae'].index[0]
+    batch_size, epoch = best
+
+    mae_final, yobs, ypred = holdout_lstm(X_train, X_test, y_train, y_test,batch_size, epoch)
+
+    d = {'cenario': cenario * len(yobs), 'range_datas': range_datas * len(yobs), 'concat_coord': concat_coord * len(yobs),
+         'data': data, 'hora': hora,
+         'yobs':yobs, 'ypred':ypred}
+    res_comp = res_comp.append(pd.DataFrame(data=d))
+
+
+
+
+
+
+
+# id = []
+# idx = []
+# for train, test in group_kfold.split(X, y, groups = indexes):
+#     id.append(train)
+#     idx.append(test)
+# train = id[1]
+# test = idx[1]
 
 #ver o que retornar e como montar o resultado

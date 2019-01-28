@@ -215,9 +215,7 @@ for i in range(len(concat_coord_un)):
     res_comp = res_comp.append(pd.DataFrame(data=d))
 
 
-
-
-
+a=1
 
 
 # id = []

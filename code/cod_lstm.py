@@ -1,4 +1,3 @@
-
 from numpy.random import seed
 seed(1)
 from tensorflow import set_random_seed
@@ -7,6 +6,7 @@ set_random_seed(2)
 
 import os
 import pandas as pd
+import itertools
 import pickle
 import random
 import numpy as np
@@ -23,21 +23,24 @@ from keras.layers import Dense
 from keras.layers import LSTM
 from keras import regularizers
 
-os.chdir('C:\\Users\\vinic\\Google Drive\\Mestrado\\pratical_project\\variability_part2\\greenhouse_tseries\\code')
+os.chdir('C:\\Users\\BRVAVL\\OneDrive - C&A Modas Ltda\\github_vavlopes\\greenhouse_tseries\\code')
 
+address = [x for x in os.listdir("../../data") if x.endswith(".pickle")]
+
+def read_pickle(adresss):
 #read all available files in a function (define)
-with open("../../data/df2014-06-15.pickle",'rb') as infile:
-    df = pickle.load(infile)
-    df = df = df.sort_values(by=['data','hora'])
-    #Holding values for results presentation
-    cenario = df.cenario.unique().tolist()
-    range_datas = df.range_datas.unique().tolist()
+    with open("../../data/df2014-06-15.pickle",'rb') as infile:
+        df = pickle.load(infile)
+        df = df = df.sort_values(by=['data','hora'])
+        #Holding values for results presentation
+        cenario = df.cenario.unique().tolist()
+        range_datas = df.range_datas.unique().tolist()
+    return(df,cenario,range_datas)        
 
 def data_preparing(df,hmlook_back,target):
     #cleaning and selecting the right columns
-    vet = ['prev_'+i for i in map(str,list(range(hmlook_back, (6+1), 1)))]
-    vet.extend((#'x','y','z',
-                'data','hora','medicao',
+    vet = ['prev_'+ hm for hm in map(str,list(range(hmlook_back, (6+1), 1)))]
+    vet.extend(('data','hora','medicao',
                 'concat_coord', 'range_datas',
                 target))
     names = "|".join(vet)
@@ -170,52 +173,68 @@ def holdout_lstm(X_train,X_test, y_train, y_test,batch_size, epoch):
     resultados = (mae)
     return(resultados, y_test, yhat)
 
+def nestedCV_Hout(target,hmlook_back,address,grid):
+    df_init,cenario,range_datas = read_pickle(address)
+    target = target
+    hmlook_back = hmlook_back
+    dfi = data_preparing(df_init,hmlook_back,target)
+    concat_coord_un = dfi.concat_coord.unique().tolist()
+    res_comp = pd.DataFrame()
+    for i in range(1):#range(len(concat_coord_un)):
+        df = dfi.loc[dfi.concat_coord == concat_coord_un[i],:]
+        concat_coord = df.concat_coord.unique().tolist()
+        df = df.drop(['concat_coord'], axis = 1)
+        train, test = Holdout_split(df)
+        data = test.data.tolist()
+        hora = test.hora.tolist()
+        X_train, X_test, y_train, y_test = manipulate_col(train, test)
+    
+        CV_scores = []
+        for i in range(len(list(grid))):
+            CV_scores.append(cros_val_own(X_train, y_train,epoch = list(grid)[i]['epochs'],batch_size = list(grid)[i]['batch_size']))
+    
+        dat = pd.DataFrame()
+        for i in range(len(CV_scores)):
+            dat = dat.append(pd.DataFrame(CV_scores[i],columns=['mae', 'batch_size','epoch']), ignore_index=True)
+    
+        #para guardar a melhor combinacao de hiperparametros
+        best = dat.groupby(['batch_size','epoch']).mean().sort_values('mae')
+        best = best['mae'].index[0]
+        batch_size, epoch = best
+    
+        mae_final, yobs, ypred = holdout_lstm(X_train, X_test, y_train, y_test,batch_size, epoch)
+    
+        d = {'tecnica':'ann_lstm',
+             'cenario': cenario * len(yobs), 'range_datas': range_datas * len(yobs),
+             'concat_coord': concat_coord * len(yobs),
+             'data': data, 'hora': hora,
+             'yobs':yobs, 'ypred':ypred}
+        res_comp = res_comp.append(pd.DataFrame(data=d))
+        path_save = "../../results/lstm/" + str(cenario) + "_" + str(target) + "_" + str(hmlook_back) + ".csv"
+    res_comp.to_csv(path_save)
+    return(res_comp)
 
 #definindo grid de CV
-grid = [{'epochs': [10,20,100], 'batch_size': [5,6,10,100]}]
+grid = [{'epochs': [10,20,100], 'batch_size': [1,10,45,100]}]
 grid = ParameterGrid(grid)
 
+#montagem da lista para iterar
+target=['ur','temp']
+address = address
+hmlook_back = range(1,6,1)
+
+iterator = list(itertools.product(target, hmlook_back,address))
+
+for it in range(1):#range(len(iterator)):
+    target,hmlook_back,address = iterator[it]
+    res_comp = nestedCV_Hout(target,hmlook_back,address,grid)
+
+
+
 # Variaveis globais
-df = df
-target = 'ur'
-hmlook_back = 6
-
-#procedural part that needs to be upgraded
-df = data_preparing(df,hmlook_back,target)
-concat_coord_un = df.concat_coord.unique().tolist()
-res_comp = pd.DataFrame()
-for i in range(len(concat_coord_un)):
-    df = df.loc[df.concat_coord == concat_coord_un[i],:]
-    concat_coord = df.concat_coord.unique().tolist()
-    df = df.drop(['concat_coord'], axis = 1)
-    train, test = Holdout_split(df)
-    data = test.data.tolist()
-    hora = test.hora.tolist()
-    X_train, X_test, y_train, y_test = manipulate_col(train, test)
-
-    #print(pd.DataFrame(X_train))
-    CV_scores = []
-    for i in range(len(list(grid))):
-        CV_scores.append(cros_val_own(X_train, y_train,epoch = list(grid)[i]['epochs'],batch_size = list(grid)[i]['batch_size']))
-
-    dat = pd.DataFrame()
-    for i in range(len(CV_scores)):
-        dat = dat.append(pd.DataFrame(CV_scores[i],columns=['mae', 'batch_size','epoch']), ignore_index=True)
-
-    #para guardar a melhor combinacao de hiperparametros
-    best = dat.groupby(['batch_size','epoch']).mean().sort_values('mae')
-    best = best['mae'].index[0]
-    batch_size, epoch = best
-
-    mae_final, yobs, ypred = holdout_lstm(X_train, X_test, y_train, y_test,batch_size, epoch)
-
-    d = {'cenario': cenario * len(yobs), 'range_datas': range_datas * len(yobs), 'concat_coord': concat_coord * len(yobs),
-         'data': data, 'hora': hora,
-         'yobs':yobs, 'ypred':ypred}
-    res_comp = res_comp.append(pd.DataFrame(data=d))
 
 
-a=1
+#a=1
 
 
 # id = []

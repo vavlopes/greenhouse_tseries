@@ -66,11 +66,16 @@ apply_lback = function(df){
   }
   
   df = do.call(bind_rows, dfi)
+  #ordenar as colunas de forma mais interpretavel
   sortedNames = mixedsort(colnames(df))
   df = df[c(sortedNames)]
   
+  #para nao perder o formato das horas no pickle file
+  df_topickle = df %>% mutate(hora = as.character(hora))
+  
   save(df, file = paste0("../../data/df",min(df$data),".RData"))
-  py_save_object(df, paste0("../../data/df",min(df$data),".pickle"), pickle = "pickle")
+  py_save_object(df_topickle, paste0("../../data/df",min(df_topickle$data),".pickle"), 
+                 pickle = "pickle")
   return(df)
 }
 

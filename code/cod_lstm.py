@@ -63,26 +63,6 @@ def Holdout_split(df):
     test = df.loc[df.data >= datas[7],]
     return(train, test)
 
-def procLabel_col(c):
-    """ Transforma uma determinada coluna objeto/label em one hot encoding """
-    Enc = LabelEncoder()
-    c = Enc.fit_transform(c)
-    OneHot = OneHotEncoder()
-    X_encoded = OneHot.fit_transform(c.reshape(-1,1)).toarray()
-    return(X_encoded)
-
-def apply_EncLabel_col(df):
-    """ Function to apply to one hot encode label variables (x,y,z) """
-    X = df.filter(regex = 'x|y|z').values
-    X = X.astype(str)
-    colunas_str = []
-    for col in range(X.shape[1]):
-        colunas_str.append(procLabel_col(X[:,col]))
-
-    #creating columns to be stacked to df.values in the end
-    xyz = np.hstack((colunas_str[0],colunas_str[1],colunas_str[2]))
-    return xyz
-
 def manipulate_col(train,test):
     """ Function to apply min max scaling to numeric variables """
     #This function needs to normalize each train and test for each concat_coord
@@ -180,7 +160,7 @@ def nestedCV_Hout(target,hmlook_back,address,grid):
     dfi = data_preparing(df_init,hmlook_back,target)
     concat_coord_un = dfi.concat_coord.unique().tolist()
     res_comp = pd.DataFrame()
-    for i in range(1):#range(len(concat_coord_un)):
+    for i in range(len(concat_coord_un)):
         df = dfi.loc[dfi.concat_coord == concat_coord_un[i],:]
         concat_coord = df.concat_coord.unique().tolist()
         df = df.drop(['concat_coord'], axis = 1)
@@ -225,24 +205,6 @@ hmlook_back = range(1,6,1)
 
 iterator = list(itertools.product(target, hmlook_back,address))
 
-for it in range(1):#range(len(iterator)):
+for it in range(len(iterator)):
     target,hmlook_back,address = iterator[it]
     res_comp = nestedCV_Hout(target,hmlook_back,address,grid)
-
-
-
-# Variaveis globais
-
-
-#a=1
-
-
-# id = []
-# idx = []
-# for train, test in group_kfold.split(X, y, groups = indexes):
-#     id.append(train)
-#     idx.append(test)
-# train = id[1]
-# test = idx[1]
-
-#ver o que retornar e como montar o resultado

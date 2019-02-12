@@ -33,7 +33,7 @@ make_forecast_svm = function(file, hmlook_back, target){
   hora = dat[test_lines,]$hora
   data = dat[test_lines,]$data
   range_datas = unique(dat$range_datas)
-  concat_coord = dat[test_lines,]$data
+  concat_coord = dat[test_lines,]$concat_coord
   
   #creating blocking column for CV - train_lines(1:5) and test_lines(6)
   blocking_train = rep(1:5, each = ceiling(length(train_lines)/5))

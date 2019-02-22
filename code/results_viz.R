@@ -8,8 +8,8 @@ gc()
 files_to_c = list.files("../../results/svm", pattern = "ypred", recursive = T, full.names = T)
 for(i in 1:length(files_to_c)){
   res = read.table(files_to_c[[i]],header = T, sep = " ", skip = 0)
-  if(unique(res$cenario) == "Cenario_1"){
-    res = res %>% mutate(concat_coord = concat_cen1)
+  if(unique(res$cenario) == "Cenario_9"){
+    res = res %>% mutate(concat_coord = concat_cen9)
     write.table(res, file = files_to_c[[i]] )
 
   }
@@ -20,10 +20,10 @@ files_tbmodel = list.files('../../data/',
                            full.names = T,
                            pattern = ".RData")
 
-dat = get(load(files_tbmodel[[1]]))
+dat = get(load(files_tbmodel[[4]]))
 test_lines = which(dat$data %in% unique(dat$data)[8:10])
 ver = dat[test_lines,] %>% arrange(data,hora)
-concat_cen1 = ver$concat_coord
+concat_cen9 = ver$concat_coord
 
 
 

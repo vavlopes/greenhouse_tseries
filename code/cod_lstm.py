@@ -23,12 +23,12 @@ from keras.layers import Dense
 from keras.layers import LSTM
 from keras import regularizers
 
-os.chdir('C:\\Users\\BRVAVL\\OneDrive - C&A Modas Ltda\\github_vavlopes\\greenhouse_tseries\\code')
+os.chdir('C:\\Users\\vinic\\Google Drive\\Mestrado\\pratical_project\\variability_part2\\greenhouse_tseries\\code')
 
 address = [x for x in os.listdir("../../data") if x.endswith(".pickle")]
 
 def read_pickle(adresss):
-#read all available files in a function (define)
+    """read a given adress that contains a pickle file"""
     with open("../../data/df2014-06-15.pickle",'rb') as infile:
         df = pickle.load(infile)
         df = df = df.sort_values(by=['data','hora'])
@@ -38,7 +38,7 @@ def read_pickle(adresss):
     return(df,cenario,range_datas)        
 
 def data_preparing(df,hmlook_back,target):
-    #cleaning and selecting the right columns
+    """cleaning and selecting the right columns"""
     vet = ['prev_'+ hm for hm in map(str,list(range(hmlook_back, (6+1), 1)))]
     vet.extend(('data','hora','medicao',
                 'concat_coord', 'range_datas',
@@ -50,6 +50,7 @@ def data_preparing(df,hmlook_back,target):
         vet_exclude = ['prev_'+i for i in map(str,list(range(1, (hmlook_back), 1)))]
         names_exclude = "|".join(vet_exclude)
         df = df.drop(df.filter(regex= names_exclude, axis = 1).columns, axis = 1)
+        #Temp on external station has temp in its name
         if target == 'temp':
             df = df.drop('temp_est_2', axis = 1)
     #mantaining only the complete cases
@@ -57,6 +58,7 @@ def data_preparing(df,hmlook_back,target):
     return(df)
 
 def Holdout_split(df):
+    """Holdout split - 7 first days to train, last 3 days to test"""
     datas = df.data.unique()
     datas = sorted(datas)
     train = df.loc[df.data < datas[7],]
@@ -73,6 +75,7 @@ def manipulate_col(train,test):
     return(X_train.values, X_test.values, y_train, y_test)
 
 def create_indexcol(X_train):
+    """Creating indexes for block CV"""
     indexes = np.repeat(range(1,(5+1),1), np.ceil(X_train.shape[0]/5))
     indexes = indexes[:(X_train.shape[0])]
     #Adding column 17 for filter during Cross validation
@@ -80,22 +83,24 @@ def create_indexcol(X_train):
     return(indexes)
 
 def reshape_data(X, y):
-
+    """Function to reshape data into LSTM format"""
     n_features = int(X.shape[1]/(7-hmlook_back)) #calculo do numero de features
     X = X.reshape(X.shape[0],(7-hmlook_back),n_features) #samples,n_lag, n_features
     y = y.reshape(y.shape[0],)
-
     return(X, y)
 
 def lstm_model(dim,time_step, n_features):
+    """General model for LSTM implementation"""
     model = Sequential()
-    model.add(LSTM(100, kernel_regularizer=regularizers.l2(0.01),input_shape=(time_step, n_features)))
+    model.add(LSTM(100, kernel_regularizer=regularizers.l2(0.01),
+                   input_shape=(time_step, n_features)))
     model.add(Dense(1,activity_regularizer=regularizers.l1(0.01)))
     model.compile(loss='mse', optimizer='adam', metrics=['mae'])
     return (model)
 
 #X and y here are suposed to be train X and y
 def cros_val_own(X, y,epoch,batch_size):
+    """ Cross validation using blocking strategy"""
     indexes = create_indexcol(X)
     group_kfold = GroupKFold(n_splits=5)
     cvscores = []
@@ -126,10 +131,10 @@ def cros_val_own(X, y,epoch,batch_size):
         resultados_part = (mae,batch_size,epoch)
         cvscores.append(resultados_part)
 
-    return(cvscores)
+    return(cvscores) #List of tuples containing each result of CV iteration
 
 def holdout_lstm(X_train,X_test, y_train, y_test,batch_size, epoch):
-    """ Description """
+    """ Holdout strategy  """
     scaler_x = MinMaxScaler()
     scaler_x.fit(X_train)
     X_train = scaler_x.transform(X_train)
@@ -154,6 +159,7 @@ def holdout_lstm(X_train,X_test, y_train, y_test,batch_size, epoch):
     return(resultados, y_test, yhat)
 
 def nestedCV_Hout(target,hmlook_back,address,grid):
+    
     df_init,cenario,range_datas = read_pickle(address)
     target = target
     hmlook_back = hmlook_back
@@ -172,7 +178,7 @@ def nestedCV_Hout(target,hmlook_back,address,grid):
         CV_scores = []
         for i in range(len(list(grid))):
             CV_scores.append(cros_val_own(X_train, y_train,epoch = list(grid)[i]['epochs'],batch_size = list(grid)[i]['batch_size']))
-    
+        print("Hyperpar search done")    
         dat = pd.DataFrame()
         for i in range(len(CV_scores)):
             dat = dat.append(pd.DataFrame(CV_scores[i],columns=['mae', 'batch_size','epoch']), ignore_index=True)
@@ -180,31 +186,57 @@ def nestedCV_Hout(target,hmlook_back,address,grid):
         #para guardar a melhor combinacao de hiperparametros
         best = dat.groupby(['batch_size','epoch']).mean().sort_values('mae')
         best = best['mae'].index[0]
+        #best combination of batch_size and epoch found
         batch_size, epoch = best
-    
+        
+        #Train and test with best combination
         mae_final, yobs, ypred = holdout_lstm(X_train, X_test, y_train, y_test,batch_size, epoch)
     
         d = {'tecnica':'ann_lstm',
              'cenario': cenario * len(yobs), 'range_datas': range_datas * len(yobs),
              'concat_coord': concat_coord * len(yobs),
              'data': data, 'hora': hora,
+             'target': target,'hmlook_back': hmlook_back,
              'yobs':yobs, 'ypred':ypred}
         res_comp = res_comp.append(pd.DataFrame(data=d))
-        path_save = "../../results/lstm/" + str(cenario) + "_" + str(target) + "_" + str(hmlook_back) + ".csv"
-    res_comp.to_csv(path_save)
+        path_save = "../../results/lstm/ypred/ypred_" + str(target) + "_" + str(cenario[0]) + "_" + str(hmlook_back) + ".txt"
+        #
+        res_comp.to_csv(path_save)
     return(res_comp)
 
 #definindo grid de CV
-grid = [{'epochs': [10,20,100], 'batch_size': [1,10,45,100]}]
+grid = [{'epochs': [100,500,1000], 'batch_size': [45,450,1000]}]
 grid = ParameterGrid(grid)
 
 #montagem da lista para iterar
 target=['ur','temp']
 address = address
-hmlook_back = range(1,6,1)
+hmlook_back = range(1,(6+1),1)
 
 iterator = list(itertools.product(target, hmlook_back,address))
+iterator = iterator[0:10]
 
 for it in range(len(iterator)):
     target,hmlook_back,address = iterator[it]
     res_comp = nestedCV_Hout(target,hmlook_back,address,grid)
+
+
+###########For testing the structure
+address = [x for x in os.listdir("../../data") if x.endswith(".pickle")]
+address = address[1]
+hmlook_back = 5
+target = 'temp'
+df_init,cenario,range_datas = read_pickle(address)
+dfi = data_preparing(df_init,hmlook_back,target)
+concat_coord_un = dfi.concat_coord.unique().tolist()
+df = dfi.loc[dfi.concat_coord == concat_coord_un[i],:]
+concat_coord = df.concat_coord.unique().tolist()
+df = df.drop(['concat_coord'], axis = 1)
+train, test = Holdout_split(df)
+data = test.data.tolist()
+hora = test.hora.tolist()
+X_train, X_test, y_train, y_test = manipulate_col(train, test)
+
+
+
+

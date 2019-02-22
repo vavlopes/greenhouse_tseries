@@ -23,13 +23,13 @@ from keras.layers import Dense
 from keras.layers import LSTM
 from keras import regularizers
 
-os.chdir('C:\\Users\\vinic\\Google Drive\\Mestrado\\pratical_project\\variability_part2\\greenhouse_tseries\\code')
+#os.chdir('C:\\Users\\vinic\\Google Drive\\Mestrado\\pratical_project\\variability_part2\\greenhouse_tseries\\code')
 
 address = [x for x in os.listdir("../../data") if x.endswith(".pickle")]
 
 def read_pickle(adresss):
     """read a given adress that contains a pickle file"""
-    with open("../../data/df2014-06-15.pickle",'rb') as infile:
+    with open("../../data/" + address,'rb') as infile:
         df = pickle.load(infile)
         df = df = df.sort_values(by=['data','hora'])
         #Holding values for results presentation
@@ -165,10 +165,11 @@ def nestedCV_Hout(target,hmlook_back,address,grid):
     hmlook_back = hmlook_back
     dfi = data_preparing(df_init,hmlook_back,target)
     res_comp = pd.DataFrame()
-    df = dfi
+    df = dfi.reset_index(drop = True).sort_index(axis = 1,ascending = False) 
     concat_coord = df.concat_coord.tolist()
     df = df.drop(['concat_coord'], axis = 1)
     train, test = Holdout_split(df)
+    concat_coord = concat_coord[(train.shape[0]):]
     data = test.data.tolist()
     hora = test.hora.tolist()
     X_train, X_test, y_train, y_test = manipulate_col(train, test)
@@ -189,10 +190,11 @@ def nestedCV_Hout(target,hmlook_back,address,grid):
     
     #Train and test with best combination
     mae_final, yobs, ypred = holdout_lstm(X_train, X_test, y_train, y_test,batch_size, epoch)
+    print("Holdout done")
 
     d = {'tecnica':'ann_lstm',
          'cenario': cenario * len(yobs), 'range_datas': range_datas * len(yobs),
-         'concat_coord': concat_coord * len(yobs),
+         'concat_coord': concat_coord,
          'data': data, 'hora': hora,
          'target': target,'hmlook_back': hmlook_back,
          'yobs':yobs, 'ypred':ypred}
@@ -203,7 +205,7 @@ def nestedCV_Hout(target,hmlook_back,address,grid):
     return(res_comp)
 
 #definindo grid de CV
-grid = [{'epochs': [100,500,1000], 'batch_size': [45,450,1000]}]
+grid = [{'epochs': [1], 'batch_size': [10000]}]
 grid = ParameterGrid(grid)
 
 #montagem da lista para iterar
@@ -226,13 +228,14 @@ hmlook_back = 5
 target = 'temp'
 df_init,cenario,range_datas = read_pickle(address)
 dfi = data_preparing(df_init,hmlook_back,target)
-concat_coord_un = dfi.concat_coord.unique().tolist()
-df = dfi.loc[dfi.concat_coord == concat_coord_un[i],:]
-concat_coord = df.concat_coord.unique().tolist()
+df = dfi.reset_index(drop = True)
+df = df.sort_index(axis = 1,ascending = False)
+concat_coord = df.concat_coord.tolist()
 df = df.drop(['concat_coord'], axis = 1)
 train, test = Holdout_split(df)
 data = test.data.tolist()
 hora = test.hora.tolist()
+concat_coord = concat_coord[(train.shape[0]):] 
 X_train, X_test, y_train, y_test = manipulate_col(train, test)
 
 

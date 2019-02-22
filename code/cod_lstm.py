@@ -164,44 +164,42 @@ def nestedCV_Hout(target,hmlook_back,address,grid):
     target = target
     hmlook_back = hmlook_back
     dfi = data_preparing(df_init,hmlook_back,target)
-    concat_coord_un = dfi.concat_coord.unique().tolist()
     res_comp = pd.DataFrame()
-    for i in range(len(concat_coord_un)):
-        df = dfi.loc[dfi.concat_coord == concat_coord_un[i],:]
-        concat_coord = df.concat_coord.unique().tolist()
-        df = df.drop(['concat_coord'], axis = 1)
-        train, test = Holdout_split(df)
-        data = test.data.tolist()
-        hora = test.hora.tolist()
-        X_train, X_test, y_train, y_test = manipulate_col(train, test)
+    df = dfi
+    concat_coord = df.concat_coord.tolist()
+    df = df.drop(['concat_coord'], axis = 1)
+    train, test = Holdout_split(df)
+    data = test.data.tolist()
+    hora = test.hora.tolist()
+    X_train, X_test, y_train, y_test = manipulate_col(train, test)
+
+    CV_scores = []
+    for i in range(len(list(grid))):
+        CV_scores.append(cros_val_own(X_train, y_train,epoch = list(grid)[i]['epochs'],batch_size = list(grid)[i]['batch_size']))
+    print("Hyperpar search done")    
+    dat = pd.DataFrame()
+    for i in range(len(CV_scores)):
+        dat = dat.append(pd.DataFrame(CV_scores[i],columns=['mae', 'batch_size','epoch']), ignore_index=True)
+
+    #para guardar a melhor combinacao de hiperparametros
+    best = dat.groupby(['batch_size','epoch']).mean().sort_values('mae')
+    best = best['mae'].index[0]
+    #best combination of batch_size and epoch found
+    batch_size, epoch = best
     
-        CV_scores = []
-        for i in range(len(list(grid))):
-            CV_scores.append(cros_val_own(X_train, y_train,epoch = list(grid)[i]['epochs'],batch_size = list(grid)[i]['batch_size']))
-        print("Hyperpar search done")    
-        dat = pd.DataFrame()
-        for i in range(len(CV_scores)):
-            dat = dat.append(pd.DataFrame(CV_scores[i],columns=['mae', 'batch_size','epoch']), ignore_index=True)
-    
-        #para guardar a melhor combinacao de hiperparametros
-        best = dat.groupby(['batch_size','epoch']).mean().sort_values('mae')
-        best = best['mae'].index[0]
-        #best combination of batch_size and epoch found
-        batch_size, epoch = best
-        
-        #Train and test with best combination
-        mae_final, yobs, ypred = holdout_lstm(X_train, X_test, y_train, y_test,batch_size, epoch)
-    
-        d = {'tecnica':'ann_lstm',
-             'cenario': cenario * len(yobs), 'range_datas': range_datas * len(yobs),
-             'concat_coord': concat_coord * len(yobs),
-             'data': data, 'hora': hora,
-             'target': target,'hmlook_back': hmlook_back,
-             'yobs':yobs, 'ypred':ypred}
-        res_comp = res_comp.append(pd.DataFrame(data=d))
-        path_save = "../../results/lstm/ypred/ypred_" + str(target) + "_" + str(cenario[0]) + "_" + str(hmlook_back) + ".txt"
-        #
-        res_comp.to_csv(path_save)
+    #Train and test with best combination
+    mae_final, yobs, ypred = holdout_lstm(X_train, X_test, y_train, y_test,batch_size, epoch)
+
+    d = {'tecnica':'ann_lstm',
+         'cenario': cenario * len(yobs), 'range_datas': range_datas * len(yobs),
+         'concat_coord': concat_coord * len(yobs),
+         'data': data, 'hora': hora,
+         'target': target,'hmlook_back': hmlook_back,
+         'yobs':yobs, 'ypred':ypred}
+    res_comp = res_comp.append(pd.DataFrame(data=d))
+    path_save = "../../results/lstm/ypred/ypred_" + str(target) + "_" + str(cenario[0]) + "_" + str(hmlook_back) + ".txt"
+    #
+    res_comp.to_csv(path_save)
     return(res_comp)
 
 #definindo grid de CV

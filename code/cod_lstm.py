@@ -20,7 +20,7 @@ import itertools
 from keras.wrappers.scikit_learn import KerasRegressor
 from keras.models import Sequential
 from keras.layers import Dense
-from keras.layers import LSTM
+from keras.layers import LSTM, CuDNNLSTM
 from keras import regularizers
 
 #os.chdir('C:\\Users\\vinic\\Google Drive\\Mestrado\\pratical_project\\variability_part2\\greenhouse_tseries\\code')
@@ -92,7 +92,7 @@ def reshape_data(X, y):
 def lstm_model(dim,time_step, n_features):
     """General model for LSTM implementation"""
     model = Sequential()
-    model.add(LSTM(100, kernel_regularizer=regularizers.l2(0.01),
+    model.add(CuDNNLSTM(dim, kernel_regularizer=regularizers.l2(0.01),
                    input_shape=(time_step, n_features)))
     model.add(Dense(1,activity_regularizer=regularizers.l1(0.01)))
     model.compile(loss='mse', optimizer='adam', metrics=['mae'])
@@ -118,7 +118,7 @@ def cros_val_own(X, y,epoch,batch_size):
         x_split_train, y_split_train = reshape_data(x_split_train, y_split_train)
         time_step, n_features = x_split_train.shape[1],x_split_train.shape[2]
         # create model
-        model = lstm_model(dim = 100,time_step = time_step, n_features = n_features)
+        model = lstm_model(dim = 10,time_step = time_step, n_features = n_features)
         # Fit the model
         model.fit(x_split_train,y_split_train,epochs=epoch,batch_size=batch_size,verbose=2)
         x_split_test, y_split_test = reshape_data(x_split_test, y[test])
@@ -146,7 +146,7 @@ def holdout_lstm(X_train,X_test, y_train, y_test,batch_size, epoch):
     #reshaping data
     X_train, y_train = reshape_data(X_train, y_train)
     time_step, n_features = X_train.shape[1],X_train.shape[2]
-    model = lstm_model(dim = 100,time_step = time_step, n_features = n_features)
+    model = lstm_model(dim = 10,time_step = time_step, n_features = n_features)
     model.fit(X_train,y_train,epochs=epoch,batch_size=batch_size,verbose=2)
     X_test, y_test = reshape_data(X_test, y_test)
 	# evaluate the model
@@ -205,7 +205,7 @@ def nestedCV_Hout(target,hmlook_back,address,grid):
     return(res_comp)
 
 #definindo grid de CV
-grid = [{'epochs': [1], 'batch_size': [10000]}]
+grid = [{'epochs': [100,1000,450], 'batch_size': [450,1000]}]
 grid = ParameterGrid(grid)
 
 #montagem da lista para iterar
@@ -214,7 +214,7 @@ address = address
 hmlook_back = range(1,(6+1),1)
 
 iterator = list(itertools.product(target, hmlook_back,address))
-iterator = iterator[0:10]
+#iterator = iterator[0:10]
 
 for it in range(len(iterator)):
     target,hmlook_back,address = iterator[it]
@@ -222,6 +222,7 @@ for it in range(len(iterator)):
 
 
 ###########For testing the structure
+"""
 address = [x for x in os.listdir("../../data") if x.endswith(".pickle")]
 address = address[1]
 hmlook_back = 5
@@ -237,7 +238,6 @@ data = test.data.tolist()
 hora = test.hora.tolist()
 concat_coord = concat_coord[(train.shape[0]):] 
 X_train, X_test, y_train, y_test = manipulate_col(train, test)
-
-
+"""
 
 

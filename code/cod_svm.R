@@ -45,6 +45,9 @@ make_forecast_svm = function(file, hmlook_back, target){
   dat = dat %>% select(-c(data,hora,medicao, concat_coord, cenario, range_datas))
   dat = dat %>% mutate_at(vars("x","y","z"), funs(as.factor))
   
+  #Creating dummy features before entering the model section
+  
+  
   
   regr_task = makeRegrTask(id = 'svm', data = dat, target = target, blocking = block)
   # especifica seed para particionar o conjunto de dados
@@ -67,7 +70,7 @@ make_forecast_svm = function(file, hmlook_back, target){
   parallelStart(mode = 'multicore', cpus = 12, level = 'mlr.tuneParams')
   
   # cria um learner de regressao com svm, que faz o preprocessing de criar variaveis dummy
-  base_learner = makeDummyFeaturesWrapper("regr.svm")
+  base_learner = makeRemoveConstantFeaturesWrapper("regr.svm")
   
   # considera agora que o learner vai ser o melhor resultado de um procedimento de tunning com CV
   lrn = makeTuneWrapper(base_learner, resampling = rmod, par.set = parameters, control = ctrl, 

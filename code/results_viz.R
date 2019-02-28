@@ -32,7 +32,7 @@ concat_cen9 = ver$concat_coord
 files_to_viz = list.files("../../results/", pattern = "ypred", recursive = T, full.names = T)
 res =list()
 for(i in 1:length(files_to_viz)){
-  res[[i]] = read.table(files_to_viz[[i]],header = T, sep = " ", skip = 0) %>% 
+  res[[i]] = read.table(files_to_viz[i],header = T, sep = " ", skip = 0) %>% 
     mutate_if(is.factor, as.character)
 }  
 results = do.call(bind_rows, res) %>% mutate(erro = ypred - yobs) %>% 

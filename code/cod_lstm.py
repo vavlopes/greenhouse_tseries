@@ -20,7 +20,7 @@ import itertools
 from keras.wrappers.scikit_learn import KerasRegressor
 from keras.models import Sequential
 from keras.layers import Dense
-from keras.layers import LSTM, CuDNNLSTM
+from keras.layers import LSTM,CuDNNLSTM
 from keras import regularizers
 
 #os.chdir('C:\\Users\\vinic\\Google Drive\\Mestrado\\pratical_project\\variability_part2\\greenhouse_tseries\\code')
@@ -64,12 +64,26 @@ def Holdout_split(df):
     train = df.loc[df.data < datas[7],]
     test = df.loc[df.data >= datas[7],]
     return(train, test)
+    
+def ordering_columns(df):
+    lista = df.columns.tolist()
+    l = [lista[i][-6:] for i in range(len(lista))]
+    unico = set(l)
+    l2 = []
+    for un in unico:
+        l2.append([lista.index(i) for i in lista if un in i])
+    l2 = list(itertools.chain(*l2))
+    return(l2)    
 
 def manipulate_col(train,test):
     """ Function to apply min max scaling to numeric variables """
     #This function needs to normalize each train and test for each concat_coord
     X_train = train.drop([target,'data','hora','medicao','range_datas'], axis=1)
+    l2 = ordering_columns(X_train)
+    X_train = X_train.iloc[:,l2]
     X_test = test.drop([target,'data','hora','medicao','range_datas'], axis=1)
+    l2 = ordering_columns(X_test)
+    X_test = X_test.iloc[:,l2]
     y_train = train[target].values.reshape(-1,1)
     y_test = test[target].values.reshape(-1,1)
     return(X_train.values, X_test.values, y_train, y_test)
@@ -82,7 +96,7 @@ def create_indexcol(X_train):
     #X_train = np.hstack((X_train,indexes.reshape(-1,1)))
     return(indexes)
 
-def reshape_data(X, y):
+def reshape_data(X, y,hmlook_back):
     """Function to reshape data into LSTM format"""
     n_features = int(X.shape[1]/(7-hmlook_back)) #calculo do numero de features
     X = X.reshape(X.shape[0],(7-hmlook_back),n_features) #samples,n_lag, n_features
@@ -92,14 +106,16 @@ def reshape_data(X, y):
 def lstm_model(dim,time_step, n_features):
     """General model for LSTM implementation"""
     model = Sequential()
-    model.add(CuDNNLSTM(dim, kernel_regularizer=regularizers.l2(0.01),
-                   input_shape=(time_step, n_features)))
-    model.add(Dense(1,activity_regularizer=regularizers.l1(0.01)))
+    model.add(CuDNNLSTM(dim,return_sequences = True, stateful = False,
+                        input_shape=(time_step, n_features)))
+    model.add(CuDNNLSTM(dim, stateful = False, 
+                        input_shape=(time_step, n_features)))
+    model.add(Dense(1), activation = 'relu')
     model.compile(loss='mse', optimizer='adam', metrics=['mae'])
     return (model)
 
 #X and y here are suposed to be train X and y
-def cros_val_own(X, y,epoch,batch_size):
+def cros_val_own(X, y,epoch,batch_size, hmlook_back):
     """ Cross validation using blocking strategy"""
     indexes = create_indexcol(X)
     group_kfold = GroupKFold(n_splits=5)
@@ -115,13 +131,17 @@ def cros_val_own(X, y,epoch,batch_size):
         scaler_y.fit(y[train])
         y_split_train = scaler_y.transform(y[train])
 
-        x_split_train, y_split_train = reshape_data(x_split_train, y_split_train)
+        x_split_train, y_split_train = reshape_data(x_split_train, 
+                                                    y_split_train,
+                                                    hmlook_back = hmlook_back)
         time_step, n_features = x_split_train.shape[1],x_split_train.shape[2]
         # create model
         model = lstm_model(dim = 10,time_step = time_step, n_features = n_features)
         # Fit the model
-        model.fit(x_split_train,y_split_train,epochs=epoch,batch_size=batch_size,verbose=2)
-        x_split_test, y_split_test = reshape_data(x_split_test, y[test])
+        model.fit(x_split_train,y_split_train,epochs=epoch,
+                  batch_size=batch_size,verbose=2, shuffle = False)
+        x_split_test, y_split_test = reshape_data(x_split_test, 
+                                                  y[test],hmlook_back = hmlook_back)
     	# evaluate the model
         yhat = model.predict(x_split_test,verbose=0)
         yhat = scaler_y.inverse_transform(yhat)
@@ -133,7 +153,7 @@ def cros_val_own(X, y,epoch,batch_size):
 
     return(cvscores) #List of tuples containing each result of CV iteration
 
-def holdout_lstm(X_train,X_test, y_train, y_test,batch_size, epoch):
+def holdout_lstm(X_train,X_test, y_train, y_test,batch_size, epoch, hmlook_back):
     """ Holdout strategy  """
     scaler_x = MinMaxScaler()
     scaler_x.fit(X_train)
@@ -144,11 +164,12 @@ def holdout_lstm(X_train,X_test, y_train, y_test,batch_size, epoch):
     scaler_y.fit(y_train)
     y_train = scaler_y.transform(y_train)
     #reshaping data
-    X_train, y_train = reshape_data(X_train, y_train)
+    X_train, y_train = reshape_data(X_train, y_train, hmlook_back = hmlook_back)
     time_step, n_features = X_train.shape[1],X_train.shape[2]
     model = lstm_model(dim = 10,time_step = time_step, n_features = n_features)
-    model.fit(X_train,y_train,epochs=epoch,batch_size=batch_size,verbose=2)
-    X_test, y_test = reshape_data(X_test, y_test)
+    model.fit(X_train,y_train,epochs=epoch,
+              batch_size=batch_size,verbose=2, shuffle = False)
+    X_test, y_test = reshape_data(X_test, y_test,hmlook_back = hmlook_back)
 	# evaluate the model
     yhat = model.predict(X_test,verbose=0)
     yhat = scaler_y.inverse_transform(yhat)
@@ -176,7 +197,10 @@ def nestedCV_Hout(target,hmlook_back,address,grid):
 
     CV_scores = []
     for i in range(len(list(grid))):
-        CV_scores.append(cros_val_own(X_train, y_train,epoch = list(grid)[i]['epochs'],batch_size = list(grid)[i]['batch_size']))
+        CV_scores.append(cros_val_own(X_train, y_train,
+                                      epoch = list(grid)[i]['epochs'],
+                                      batch_size = list(grid)[i]['batch_size'],
+                                      hmlook_back = hmlook_back))
     print("Hyperpar search done")    
     dat = pd.DataFrame()
     for i in range(len(CV_scores)):
@@ -189,7 +213,9 @@ def nestedCV_Hout(target,hmlook_back,address,grid):
     batch_size, epoch = best
     
     #Train and test with best combination
-    mae_final, yobs, ypred = holdout_lstm(X_train, X_test, y_train, y_test,batch_size, epoch)
+    mae_final, yobs, ypred = holdout_lstm(X_train, X_test, y_train, y_test,
+                                          batch_size, epoch, 
+                                          hmlook_back = hmlook_back)
     print("Holdout done")
 
     d = {'tecnica':'ann_lstm',
@@ -200,12 +226,12 @@ def nestedCV_Hout(target,hmlook_back,address,grid):
          'yobs':yobs, 'ypred':ypred}
     res_comp = res_comp.append(pd.DataFrame(data=d))
     path_save = "../../results/lstm/ypred/ypred_" + str(target) + "_" + str(cenario[0]) + "_" + str(hmlook_back) + ".txt"
-    #
-    res_comp.to_csv(path_save)
+    # to save in proper format (same as R)
+    res_comp.to_csv(path_save, sep = " ", index = False)
     return(res_comp)
 
 #definindo grid de CV
-grid = [{'epochs': [100,1000,450], 'batch_size': [450,1000]}]
+grid = [{'epochs': [100,1000,1500], 'batch_size': [100,1000]}]
 grid = ParameterGrid(grid)
 
 #montagem da lista para iterar
@@ -222,15 +248,15 @@ for it in range(len(iterator)):
 
 
 ###########For testing the structure
-"""
+
 address = [x for x in os.listdir("../../data") if x.endswith(".pickle")]
 address = address[1]
-hmlook_back = 5
+hmlook_back = 4
 target = 'temp'
 df_init,cenario,range_datas = read_pickle(address)
 dfi = data_preparing(df_init,hmlook_back,target)
 df = dfi.reset_index(drop = True)
-df = df.sort_index(axis = 1,ascending = False)
+df = df.sort_index(axis = 1,ascending = False, kind = 'heapsort', sort_remaining = False)
 concat_coord = df.concat_coord.tolist()
 df = df.drop(['concat_coord'], axis = 1)
 train, test = Holdout_split(df)
@@ -238,6 +264,7 @@ data = test.data.tolist()
 hora = test.hora.tolist()
 concat_coord = concat_coord[(train.shape[0]):] 
 X_train, X_test, y_train, y_test = manipulate_col(train, test)
-"""
 
 
+
+    

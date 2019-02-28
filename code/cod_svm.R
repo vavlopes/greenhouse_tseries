@@ -46,8 +46,7 @@ make_forecast_svm = function(file, hmlook_back, target){
   dat = dat %>% mutate_at(vars("x","y","z"), funs(as.factor))
   
   #Creating dummy features before entering the model section
-  
-  
+  dat = createDummyFeatures(dat)
   
   regr_task = makeRegrTask(id = 'svm', data = dat, target = target, blocking = block)
   # especifica seed para particionar o conjunto de dados
@@ -59,17 +58,17 @@ make_forecast_svm = function(file, hmlook_back, target){
   
   # especifica que o K deve ser variado de 1 a 20
   parameters = makeParamSet(
-    makeDiscreteParam("cost", values = 2^(-2:2)),
-    makeDiscreteParam("gamma", values = 2^(-2:2)),
-    makeNumericParam("epsilon",lower = 0.05, upper = 0.3)
+    makeNumericParam("cost", lower = 2^-5, upper = 2^5),
+    makeNumericParam("gamma", lower = 2^-8, upper = 2^3),
+    makeNumericParam("epsilon",lower = 0.005, upper = 0.5)
   )
   
   # especifica que usaremos uma busca aleatoria
   ctrl = makeTuneControlRandom(maxit = 50L)
   
-  parallelStart(mode = 'multicore', cpus = 12, level = 'mlr.tuneParams')
+  parallelStart(mode = 'multicore', cpus = 14, level = 'mlr.tuneParams')
   
-  # cria um learner de regressao com svm, que faz o preprocessing de criar variaveis dummy
+  # cria um learner de regressao com svm, que faz o preprocessing de deletar as variaveis constantes
   base_learner = makeRemoveConstantFeaturesWrapper("regr.svm")
   
   # considera agora que o learner vai ser o melhor resultado de um procedimento de tunning com CV
@@ -106,7 +105,9 @@ files_tbmodel = list.files('../../data/',
                            full.names = T,
                            pattern = ".RData")
 
-target = c("ur","temp")
+files_tbmodel = files_tbmodel[1]
+
+target = c("temp")
 hmlook_back = seq(1:6)
 
 #para criar um dataframe com todos os inputs possiveis para a func de forecast com svm

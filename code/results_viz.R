@@ -35,16 +35,16 @@ for(i in 1:length(files_to_viz)){
   res[[i]] = read.table(files_to_viz[i],header = T, sep = " ", skip = 0) %>% 
     mutate_if(is.factor, as.character)
 }  
-results = do.call(bind_rows, res) %>% mutate(erro = ypred - yobs) %>% 
+results = do.call(rbind, res) %>% mutate(erro = ypred - yobs) %>% 
   mutate(abs_error = abs(erro))
 
 
 # Plotting MAE progress over Scenarios -----------------------------------
 res1 = results %>% group_by(tecnica,target,cenario, hmlook_back) %>% 
   summarise(mae = mean(abs_error)) %>% as.data.frame()
-res1 %>% filter(target == "temp") %>% 
+res1 %>% filter(target == "ur") %>% 
   ggplot(aes(x = hmlook_back, y = mae, col = cenario)) + geom_line()+
-  facet_wrap(.~tecnica, scales  = "free")
+  facet_wrap(.~tecnica)#, scales  = "free")
 
 # Plotting ypred x yobs in test set ---------------------------------------
 

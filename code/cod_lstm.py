@@ -2,8 +2,6 @@ from numpy.random import seed
 seed(1)
 from tensorflow import set_random_seed
 set_random_seed(2)
-
-
 import os
 import pandas as pd
 import itertools
@@ -20,14 +18,14 @@ import itertools
 from keras.wrappers.scikit_learn import KerasRegressor
 from keras.models import Sequential
 from keras.layers import Dense
-from keras.layers import LSTM#,CuDNNLSTM
+from keras.layers import LSTM,CuDNNLSTM
 from keras import regularizers
 
 #os.chdir('C:\\Users\\vinic\\Google Drive\\Mestrado\\pratical_project\\variability_part2\\greenhouse_tseries\\code')
 
 address = [x for x in os.listdir("../../data") if x.endswith(".pickle")]
 
-def read_pickle(adresss):
+def read_pickle(address):
     """read a given adress that contains a pickle file"""
     with open("../../data/" + address,'rb') as infile:
         df = pickle.load(infile)
@@ -56,6 +54,7 @@ def data_preparing(df,hmlook_back,target):
     #mantaining only the complete cases
     df = df.dropna(0)
     return(df)
+
 
 def Holdout_split(df):
     """Holdout split - 7 first days to train, last 3 days to test"""
@@ -109,9 +108,9 @@ def reshape_data(X, y,hmlook_back):
 def lstm_model(dim,time_step, n_features):
     """General model for LSTM implementation"""
     model = Sequential()
-    model.add(LSTM(dim,return_sequences = True, stateful = False,
+    model.add(CuDNNLSTM(dim,return_sequences = True, stateful = False,
                         input_shape=(time_step, n_features)))
-    model.add(LSTM(dim, stateful = False, 
+    model.add(CuDNNLSTM(dim, stateful = False, 
                         input_shape=(time_step, n_features)))
     model.add(Dense(1, activation = 'relu'))
     model.compile(loss='mse', optimizer='adam', metrics=['mae'])
@@ -200,7 +199,7 @@ def nestedCV_Hout(target,hmlook_back,address,grid):
     #Random search strategy
     #getting 10 combinations on the grid
     random.seed(42)
-    indexes = random.sample(list(range(len(list(grid)))),2)
+    indexes = random.sample(list(range(len(list(grid)))),10)
 
     CV_scores = []
     for i in indexes:
@@ -246,20 +245,21 @@ def nestedCV_Hout(target,hmlook_back,address,grid):
     return(res_comp)
 
 #definindo grid de CV
-#grid = [{'epochs': [100,500,1000], 'batch_size': [100,450,1000], 'dim': [5,10,20,30]}]
-grid = [{'epochs': [1,2], 'batch_size': [10000,20000], 'dim': [5]}]
+grid = [{'epochs': [100,500,1000], 'batch_size': [100,450,1000], 'dim': [5,10,20,30]}]
+#grid = [{'epochs': [1,2], 'batch_size': [10000,20000], 'dim': [5]}]
 grid = ParameterGrid(grid)
 
 #montagem da lista para iterar
 target=['temp']
-address = address
+address = sorted(address)[:3]
 hmlook_back = range(1,(6+1),1)
 
 iterator = list(itertools.product(target, hmlook_back,address))
 #iterator = iterator[0:10]
 
 for it in range(len(iterator)):
-    target,hmlook_back,address = iterator[it]
+    print(it)
+    target,hmlook_back,address = iterator[3]
     res_comp = nestedCV_Hout(target,hmlook_back,address,grid)
 
 

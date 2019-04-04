@@ -11,7 +11,7 @@ for(i in 1:length(files_to_c)){
   if(unique(res$cenario) == "Cenario_9"){
     res = res %>% mutate(concat_coord = concat_cen9)
     write.table(res, file = files_to_c[[i]] )
-
+    
   }
 }
 
@@ -41,10 +41,50 @@ results = do.call(rbind, res) %>% mutate(erro = ypred - yobs) %>%
 
 # Plotting MAE progress over Scenarios -----------------------------------
 res1 = results %>% group_by(tecnica,target,cenario, hmlook_back) %>% 
-  summarise(mae = mean(abs_error)) %>% as.data.frame()
-res1 %>% filter(target == "ur") %>% 
-  ggplot(aes(x = hmlook_back, y = mae, col = cenario)) + geom_line()+
-  facet_wrap(.~tecnica)#, scales  = "free")
+  summarise(mae = mean(abs_error)) %>% as.data.frame() %>% 
+  rename(Tecnica = tecnica) %>% 
+  mutate(Tecnica = case_when(
+    Tecnica == "ann_lstm" ~ "LSTM",
+    Tecnica == "svm" ~ "SVR",
+    Tecnica == "brt" ~ "BRT"
+  )) %>% 
+  mutate(cenario = case_when(
+    cenario == "Cenario_1" ~ "Cenário 1",
+    cenario == "Cenario_5" ~ "Cenário 5",
+    cenario == "Cenario_7" ~ "Cenário 7",
+    cenario == "Cenario_9" ~ "Cenário 9"
+  ))
+
+if(target == "temp"){
+  #br = 0.5
+  y_ax = 'MAE (°C)'
+}else{
+  #br = 2
+  y_ax = 'MAE (%)'
+}
+
+(p1 = res1 %>% filter(target == "temp") %>% 
+    ggplot(aes(x = hmlook_back, y = mae, col = Tecnica)) + geom_line()+
+    facet_wrap(.~cenario)+
+    theme_bw() + theme(text = element_text(size = 14)) +
+    theme(panel.grid.major = element_blank(), panel.grid.minor = element_blank()) + 
+    theme(axis.text.x = element_text(size = 16))+
+    theme(axis.title.x = element_text(margin = margin(t = 8)))+
+    theme(axis.text.y = element_text(size=16))+
+    theme(axis.title.y = element_text(margin = margin(r = 8)))+
+    theme(axis.title = element_text(size=22))+
+    theme(legend.text=element_text(size=18))+
+    theme(legend.title = element_text(size = 20))+
+    theme(strip.text = element_text(size = 20)) + 
+    scale_x_discrete(name ="Intervalo de tempo (min)",
+                     limits=c("10","20","30","40","50","60")) +
+    ylab(y_ax))
+
+p1$labels$colour = "Técnica"
+
+ggsave(filename = paste0("../../part_1/figures/2ndpart_",target,"_",
+                         "error_time",".png"), plot = p1,
+       dpi = 1100, width = 16, height = 12)
 
 # Plotting ypred x yobs in test set ---------------------------------------
 

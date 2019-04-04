@@ -1,6 +1,7 @@
 library(tidyverse)
 library(arules)
 library(lubridate)
+library(gtools)
 
 rm(list = ls())
 gc()
@@ -105,24 +106,53 @@ Rec_plot = function(cenario,target){
 
 #Function to plot tempo and ur across time
 
-progress = function(cenario, target, tec){
+progress = function(target, tec){
   
-  pred = gather_info(cenario, target) 
+  pred = list()
+  for(cenario in c("cenario_1","cenario_5","cenario_7","cenario_9")){
+    pred[[cenario]] = gather_info(cenario, target) 
+    
+    pred[[cenario]]$tecnica = trimws(pred[[cenario]]$tecnica, which = c("both"))
+    
+    pred[[cenario]] = pred[[cenario]] %>% filter(tecnica == tec)
+    
+    pred[[cenario]] = pred[[cenario]] %>% mutate(cenario = cenario)
+    
+    pred[[cenario]] = pred[[cenario]] %>% 
+      gather(variable, value, -(tecnica:cenario)) %>% 
+      mutate(concat_coord = paste0(x,y,z,variable,cenario)) 
+    
+    Timestamp = c(rep(1:(((dim(pred[[cenario]])[1])/45)/2),each = 45),
+                  rep(1:(((dim(pred[[cenario]])[1])/45)/2),each = 45))
+    
+    pred[[cenario]] = pred[[cenario]] %>% 
+      mutate(Timestamp = Timestamp)
+  }
   
-  pred$tecnica = trimws(pred$tecnica, which = c("both"))
+  pred = do.call(rbind,pred) %>% 
+    mutate(cenario = case_when(
+      cenario == "cenario_1" ~ "Cenário 1c",
+      cenario == "cenario_5" ~ "Cenário 2c",
+      cenario == "cenario_7" ~ "Cenário 3c",
+      cenario == "cenario_9" ~ "Cenário 4c",
+      TRUE ~ "erro"
+      
+    ))
   
-  pred = pred %>% filter(tecnica == tec)
+  if(target == "temp"){
+    #br = 0.5
+    y_ax = 'Temperatura (°C)'
+  }else{
+    #br = 2
+    y_ax = 'Umidade relativa (%)'
+  }
   
-  pred = pred  %>% 
-    gather(variable, value, -(tecnica:z)) %>% 
-    mutate(concat_coord = paste0(x,y,z,variable)) %>% 
-    mutate(Timestamp = c(rep(1:((dim(pred)[1])/45),each = 45),rep(1:((dim(pred)[1])/45),each = 45)))
   
   p1  = pred %>% filter(value > 0) %>% 
     ggplot(aes(x = Timestamp,y = value)) + 
     geom_line(aes(group = concat_coord,colour=variable), size = 0.65) + 
-    #facet_wrap(~cenario, ncol = 2, scales = "free") + 
-    xlab('Timestamp') + ylab('Temperatura (°C)') +
+    facet_wrap(~cenario, ncol = 2, scales = "free") + 
+    xlab('Timestamp') + ylab(y_ax) +
     scale_color_manual(labels = c("Predito", "Real"),values=c(rgb(1,0,0), rgb(0,0,1,0.4))) +
     #facet_grid(tecnica~cenario, scales = "free") + 
     theme_bw() + theme(text = element_text(size = 7)) +
@@ -137,8 +167,8 @@ progress = function(cenario, target, tec){
     ggtitle(tec) +
     theme(plot.title = element_text(hjust = 0.5, size = 12)) 
   ggsave(filename = paste0("../../part_1/figures/progress_",tec,"_",
-                           cenario,"_",target,".png"), plot = p1,
-         dpi = 1000, width = 8, height = 6)
+                           target,".png"), plot = p1,
+         dpi = 1500, width = 12, height = 6)
   
   
 }
@@ -170,15 +200,15 @@ boxplot_progress = function(cenario, target){
     y_ax = "Umidade relativa (%)"
   }
   
- p1 =  dat %>% ggplot(aes(x = range_hour, y = real)) +
+  p1 =  dat %>% ggplot(aes(x = range_hour, y = real)) +
     stat_boxplot(geom ='errorbar') +
     geom_boxplot() +
     xlab("Intervalo de horas") +
     scale_y_continuous(name=y_ax) +
     theme_classic() +
     theme(panel.background = element_rect(fill="white",
-                                           size=0.5, linetype="solid", 
-                                           colour ="black")) 
+                                          size=0.5, linetype="solid", 
+                                          colour ="black")) 
   
   ggsave(filename = paste0("../../part_1/figures/boxplot_",cenario,"_",target,".png"), plot = p1,
          dpi = 1000, width = 10, height = 5)
@@ -190,26 +220,28 @@ sd_progress = function(target){
   dat = list()
   cenario = c("cenario_1","cenario_5","cenario_7","cenario_9")
   for(cenario in cenario){
-  dat[[cenario]] = gather_info(cenario, target) %>% 
-    filter(tecnica == "brt", real > 0) %>% #just to select the data once not three times
-    mutate(hora = hms(hora)) %>%
-    mutate(range_hour = case_when(
-      hora > hms("00:00:00") & hora <= hms("03:00:00") ~ "00-03",
-      hora > hms("03:00:00") & hora <= hms("06:00:00") ~ "03-06",
-      hora > hms("06:00:00") & hora <= hms("09:00:00") ~ "06-09",
-      hora > hms("09:00:00") & hora <= hms("12:00:00") ~ "09-12",
-      hora > hms("12:00:00") & hora <= hms("15:00:00") ~ "12-15",
-      hora > hms("15:00:00") & hora <= hms("18:00:00") ~ "15-18",
-      hora > hms("18:00:00") & hora <= hms("21:00:00") ~ "18-21",
-      hora > hms("21:00:00") & hora <= hms("24:00:00") ~ "21-24",
-      TRUE ~ "ERRO"
-    )) %>% group_by(range_hour) %>%
-    summarise(sd_real = (sd(real)/mean(real))) %>% 
-    mutate(cenario = cenario)
+    dat[[cenario]] = gather_info(cenario, target) %>% 
+      filter(tecnica == "brt", real > 0) %>% #just to select the data once not three times
+      mutate(datas = paste0(data," ",hora)) 
+    dates = round_date(ymd_hms(dat[[cenario]]$datas),unit = "1 hour")
+    dat[[cenario]] = dat[[cenario]] %>% 
+      mutate(datas = dates) %>% 
+      group_by(datas) %>%
+      summarise(sd_real = (sd(real)/mean(real))) 
+    
+    dat[[cenario]] = dat[[cenario]] %>% 
+      mutate(hora = hour(datas), minuto = minute(datas), segundo = second(datas)) %>%
+      mutate(range_hour = paste(hora,minuto,segundo, sep = ":0")) %>% 
+      mutate(cenario = cenario) %>% 
+      group_by(range_hour,hora, cenario) %>%
+      summarise(sd_real = mean(sd_real)) %>% 
+      arrange(hora) %>% as.data.frame() %>% 
+      mutate(range_hour = ifelse(str_extract(range_hour,"^\\d*") %in% seq(0,9,1), 
+                                 paste0("0",range_hour),range_hour))
   }
   
   df = do.call(bind_rows, dat)
-    
+  
   if(target == "temp"){
     #br = 0.5
     y_ax = "Homogeneidade"
@@ -218,14 +250,18 @@ sd_progress = function(target){
     y_ax = "Homogeneidade"
   }
   
-  p1 =  df %>% ggplot(aes(x = range_hour, y = sd_real, col = cenario)) +
+  (p1 =  df %>%
+    ggplot(aes(x = range_hour, y = sd_real, col = cenario)) +
     geom_line(aes(group = cenario)) +
     xlab("Intervalo de horas") +
     scale_y_continuous(name=y_ax) +
     theme_classic() +
+    theme(axis.text.x = element_text(size = 8,angle = 30))+
+    theme(axis.title.x = element_text(margin = margin(t = 8)))+
+    theme(axis.title.y = element_text(margin = margin(r = 8))) +
     theme(panel.background = element_rect(fill="white",
                                           size=0.5, linetype="solid", 
-                                          colour ="black")) 
+                                          colour ="black"))) 
   
   ggsave(filename = paste0("../../part_1/figures/sd_",target,".png"), plot = p1,
          dpi = 2000, width = 10, height = 5)
@@ -243,8 +279,7 @@ alpha = data.frame(expand.grid(
 alpha = split(alpha,list(alpha$cenario,alpha$target,alpha$tecnica), drop=TRUE)
 
 rec_list = lapply(alpha, function(x) Rec_plot(cenario = x[,"cenario"], target = x[,"target"]))
-progress_list = lapply(alpha, function(x) progress(cenario = x[,"cenario"], 
-                                                   target = x[,"target"],
+progress_list = lapply(alpha, function(x) progress(target = x[,"target"],
                                                    tec = x[,"tecnica"]))
 boxplot_list = lapply(alpha, function(x) boxplot_progress(cenario = x[,"cenario"], target = x[,"target"]))
 sd_list = lapply(alpha, function(x) sd_progress( target = x[,"target"]))

@@ -26,7 +26,9 @@ from keras import regularizers
 address = [x for x in os.listdir("../../data") if x.endswith(".pickle")]
 
 def read_pickle(address):
-    """read a given adress that contains a pickle file"""
+    """
+    read a given adress that contains a pickle file
+    """
     with open("../../data/" + address,'rb') as infile:
         df = pickle.load(infile)
         df = df = df.sort_values(by=['data','hora'])
@@ -36,7 +38,9 @@ def read_pickle(address):
     return(df,cenario,range_datas)        
 
 def data_preparing(df,hmlook_back,target):
-    """cleaning and selecting the right columns"""
+    """
+    cleaning and selecting the right columns
+    """
     vet = ['prev_'+ hm for hm in map(str,list(range(hmlook_back, (6+1), 1)))]
     vet.extend(('data','hora','medicao',
                 'concat_coord', 'range_datas',
@@ -57,7 +61,9 @@ def data_preparing(df,hmlook_back,target):
 
 
 def Holdout_split(df):
-    """Holdout split - 7 first days to train, last 3 days to test"""
+    """
+    Holdout split - 7 first days to train, last 3 days to test
+    """
     datas = df.data.unique()
     datas = sorted(datas)
     train = df.loc[df.data < datas[7],]
@@ -65,8 +71,10 @@ def Holdout_split(df):
     return(train, test)
     
 def ordering_columns(df):
-    """ Function to order columns mantaining all features for a given
-    timestep together"""
+    """ 
+    Function to order columns mantaining all features for a given
+    timestep together
+    """
     lista = df.columns.tolist()
     l = [lista[i][-6:] for i in range(len(lista))]
     unico = set(l)
@@ -78,7 +86,9 @@ def ordering_columns(df):
     return(l2)    
 
 def manipulate_col(train,test):
-    """ Function to apply min max scaling to numeric variables """
+    """ 
+    Function to apply min max scaling to numeric variables 
+    """
     #This function needs to normalize each train and test for each concat_coord
     X_train = train.drop([target,'data','hora','medicao','range_datas'], axis=1)
     l2 = ordering_columns(X_train)
@@ -91,7 +101,9 @@ def manipulate_col(train,test):
     return(X_train.values, X_test.values, y_train, y_test)
 
 def create_indexcol(X_train):
-    """Creating indexes for block CV"""
+    """
+    Creating indexes for block CV
+    """
     indexes = np.repeat(range(1,(5+1),1), np.ceil(X_train.shape[0]/5))
     indexes = indexes[:(X_train.shape[0])]
     #Adding column 17 for filter during Cross validation
@@ -99,14 +111,18 @@ def create_indexcol(X_train):
     return(indexes)
 
 def reshape_data(X, y,hmlook_back):
-    """Function to reshape data into LSTM format"""
+    """
+    Function to reshape data into LSTM format
+    """
     n_features = int(X.shape[1]/(7-hmlook_back)) #calculo do numero de features
     X = X.reshape(X.shape[0],(7-hmlook_back),n_features) #samples,n_lag, n_features
     y = y.reshape(y.shape[0],)
     return(X, y)
 
 def lstm_model(dim,time_step, n_features):
-    """General model for LSTM implementation"""
+    """
+    General model for LSTM implementation
+    """
     model = Sequential()
     model.add(CuDNNLSTM(dim,return_sequences = True, stateful = False,
                         input_shape=(time_step, n_features)))
@@ -118,7 +134,9 @@ def lstm_model(dim,time_step, n_features):
 
 #X and y here are suposed to be train X and y
 def cros_val_own(X, y,epoch,batch_size, hmlook_back, dim):
-    """ Cross validation using blocking strategy"""
+    """ 
+    Cross validation using blocking strategy
+    """
     indexes = create_indexcol(X)
     group_kfold = GroupKFold(n_splits=5)
     cvscores = []
@@ -156,7 +174,9 @@ def cros_val_own(X, y,epoch,batch_size, hmlook_back, dim):
     return(cvscores) #List of tuples containing each result of CV iteration
 
 def holdout_lstm(X_train,X_test, y_train, y_test,batch_size, epoch, hmlook_back, dim):
-    """ Holdout strategy  """
+    """ 
+    Holdout strategy  
+    """
     scaler_x = MinMaxScaler()
     scaler_x.fit(X_train)
     X_train = scaler_x.transform(X_train)
@@ -245,13 +265,13 @@ def nestedCV_Hout(target,hmlook_back,address,grid):
     return(res_comp)
 
 #definindo grid de CV
-grid = [{'epochs': [100,500,1000], 'batch_size': [100,450,1000], 'dim': [5,10,20,30]}]
+grid = [{'epochs': [100,500,1000], 'batch_size': [64,256,1024], 'dim': [5,10,20,30]}]
 #grid = [{'epochs': [1,2], 'batch_size': [10000,20000], 'dim': [5]}]
 grid = ParameterGrid(grid)
 
 #montagem da lista para iterar
 target=['temp']
-address = sorted(address)[:3]
+address = sorted(address)
 hmlook_back = range(1,(6+1),1)
 
 iterator = list(itertools.product(target, hmlook_back,address))
@@ -259,7 +279,7 @@ iterator = list(itertools.product(target, hmlook_back,address))
 
 for it in range(len(iterator)):
     print(it)
-    target,hmlook_back,address = iterator[3]
+    target,hmlook_back,address = iterator[it]
     res_comp = nestedCV_Hout(target,hmlook_back,address,grid)
 
 
@@ -268,7 +288,7 @@ for it in range(len(iterator)):
 address = [x for x in os.listdir("../../data") if x.endswith(".pickle")]
 address = address[1]
 hmlook_back = 1
-target = 'ur'
+target = 'temp'
 df_init,cenario,range_datas = read_pickle(address)
 dfi = data_preparing(df_init,hmlook_back,target)
 df = dfi.reset_index(drop = True)

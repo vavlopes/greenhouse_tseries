@@ -287,12 +287,12 @@ for it in range(len(iterator)):
 
 address = [x for x in os.listdir("../../data") if x.endswith(".pickle")]
 address = address[1]
-hmlook_back = 1
+hmlook_back = 4
 target = 'temp'
 df_init,cenario,range_datas = read_pickle(address)
 dfi = data_preparing(df_init,hmlook_back,target)
 df = dfi.reset_index(drop = True)
-df = df.sort_index(axis = 1,ascending = False, kind = 'heapsort', sort_remaining = False)
+df = df.sort_index(axis = 1,ascending = False)
 concat_coord = df.concat_coord.tolist()
 df = df.drop(['concat_coord'], axis = 1)
 train, test = Holdout_split(df)
@@ -301,6 +301,8 @@ hora = test.hora.tolist()
 concat_coord = concat_coord[(train.shape[0]):] 
 X_train, X_test, y_train, y_test = manipulate_col(train, test)
 
-
+X_train, y_train = reshape_data(X_train, 
+                                y_train,
+                                hmlook_back = hmlook_back)
 
     

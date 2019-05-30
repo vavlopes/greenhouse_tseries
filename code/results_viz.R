@@ -63,7 +63,7 @@ if(target == "temp"){
   y_ax = 'MAE (%)'
 }
 
-(p1 = res1 %>% filter(target == "temp") %>% 
+(p1 = res1 %>% filter(target == "ur") %>% 
     ggplot(aes(x = hmlook_back, y = mae, col = Tecnica)) + geom_line()+
     facet_wrap(.~cenario)+
     theme_bw() + theme(text = element_text(size = 14)) +

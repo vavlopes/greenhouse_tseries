@@ -173,6 +173,49 @@ progress = function(target, tec){
   
 }
 
+# Function to calculate RRMSE for all scenarios tecniques and targets
+
+RRMSE = function(target){
+  pred = list()
+  for(cenario in c("cenario_1","cenario_5","cenario_7","cenario_9")){
+    pred[[cenario]] = gather_info(cenario, target) 
+    
+    pred[[cenario]]$tecnica = trimws(pred[[cenario]]$tecnica, which = c("both"))
+    
+    pred[[cenario]] = pred[[cenario]] %>% mutate(cenario = cenario) 
+    
+  }
+  
+  df = do.call(bind_rows, pred)
+  rrmse_by_coord = df %>% group_by(tecnica, cenario,x,y,z) %>% 
+    summarise(media_real = mean(real),rmse = sqrt(mean((predicted - real)^2))) %>% 
+    ungroup() %>% 
+    group_by(tecnica, cenario,x,y,z) %>% 
+    summarise(rrmse = (100/media_real)*rmse)
+  
+}
+
+
+# Function to calculate RMSE for each coordinate
+
+RMSE = function(target){
+  pred = list()
+  for(cenario in c("cenario_1","cenario_5","cenario_7","cenario_9")){
+    pred[[cenario]] = gather_info(cenario, target) 
+    
+    pred[[cenario]]$tecnica = trimws(pred[[cenario]]$tecnica, which = c("both"))
+    
+    pred[[cenario]] = pred[[cenario]] %>% mutate(cenario = cenario) 
+    
+  }
+  
+  df = do.call(bind_rows, pred)
+  rmse_by_coord = df %>% group_by(tecnica, cenario,x,y,z) %>% 
+    summarise(mae = mean(abs(predicted - real)),rmse = sqrt(mean((predicted - real)^2))) 
+
+}
+
+
 #Function to plot descriptive data
 
 boxplot_progress = function(cenario, target){
@@ -251,17 +294,17 @@ sd_progress = function(target){
   }
   
   (p1 =  df %>%
-    ggplot(aes(x = range_hour, y = sd_real, col = cenario)) +
-    geom_line(aes(group = cenario)) +
-    xlab("Intervalo de horas") +
-    scale_y_continuous(name=y_ax) +
-    theme_classic() +
-    theme(axis.text.x = element_text(size = 8,angle = 30))+
-    theme(axis.title.x = element_text(margin = margin(t = 8)))+
-    theme(axis.title.y = element_text(margin = margin(r = 8))) +
-    theme(panel.background = element_rect(fill="white",
-                                          size=0.5, linetype="solid", 
-                                          colour ="black"))) 
+      ggplot(aes(x = range_hour, y = sd_real, col = cenario)) +
+      geom_line(aes(group = cenario)) +
+      xlab("Intervalo de horas") +
+      scale_y_continuous(name=y_ax) +
+      theme_classic() +
+      theme(axis.text.x = element_text(size = 8,angle = 30))+
+      theme(axis.title.x = element_text(margin = margin(t = 8)))+
+      theme(axis.title.y = element_text(margin = margin(r = 8))) +
+      theme(panel.background = element_rect(fill="white",
+                                            size=0.5, linetype="solid", 
+                                            colour ="black"))) 
   
   ggsave(filename = paste0("../../part_1/figures/sd_",target,".png"), plot = p1,
          dpi = 2000, width = 10, height = 5)

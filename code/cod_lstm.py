@@ -87,9 +87,9 @@ def ordering_columns(df):
 
 def manipulate_col(train,test):
     """ 
-    Function to apply min max scaling to numeric variables 
+    Function to handle columns preserving the ones that are gonna be processed
+    Also helps with ordering columns names for better batch organization 
     """
-    #This function needs to normalize each train and test for each concat_coord
     X_train = train.drop([target,'data','hora','medicao','range_datas'], axis=1)
     l2 = ordering_columns(X_train)
     X_train = X_train.iloc[:,l2]

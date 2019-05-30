@@ -53,7 +53,7 @@ data_process = function(file,hmlook_back,target){
   
   dat_train = dat[train_lines,]
   #dat_train = dat_train[1:400,] #!!!mudar
-  #limpeza das colunas com valor zerado (length(unique) verifica o numero de valores unicos)
+  #limpeza das colunas com apenas um valor(length(unique) verifica o numero de valores unicos)
   dat_train = dat_train[,apply(dat_train, 2, function(col) { length(unique(col)) > 1 })]
   
   dat_test = dat[test_lines,]

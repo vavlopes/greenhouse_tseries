@@ -104,7 +104,7 @@ Rec_plot = function(cenario,target){
          dpi = 1000, width = 6, height = 5)
 }
 
-#Function to plot tempo and ur across time
+#Function to plot temp and ur across time
 
 progress = function(target, tec){
   
@@ -136,7 +136,10 @@ progress = function(target, tec){
       cenario == "cenario_7" ~ "Cenário 3c",
       cenario == "cenario_9" ~ "Cenário 4c",
       TRUE ~ "erro"
-      
+    ), tecnica = case_when(
+      tecnica == "brt" ~ "Boosted Regression Trees",
+      tecnica == "rf" ~ "Florestas Aleatórias",
+      tecnica == "svm" ~ "Máquinas de Vetores-Suporte"
     ))
   
   if(target == "temp"){
@@ -154,21 +157,20 @@ progress = function(target, tec){
     facet_wrap(~cenario, ncol = 2, scales = "free") + 
     xlab('Timestamp') + ylab(y_ax) +
     scale_color_manual(labels = c("Predito", "Real"),values=c(rgb(1,0,0), rgb(0,0,1,0.4))) +
-    #facet_grid(tecnica~cenario, scales = "free") + 
     theme_bw() + theme(text = element_text(size = 7)) +
     theme(panel.grid.major = element_blank(), panel.grid.minor = element_blank()) + 
     theme(axis.text.x = element_text(size = 6))+
     theme(axis.text.y = element_text(size=6))+
-    theme(axis.title = element_text(size=12))+
+    theme(axis.title = element_text(size=13))+
     theme(legend.text=element_text(size=10))+
     theme(legend.title = element_text(size = 10))+
     theme(strip.text = element_text(size = 10)) + 
     labs(col="Dados") +
-    ggtitle(tec) +
+    ggtitle(unique(pred$tecnica)) +
     theme(plot.title = element_text(hjust = 0.5, size = 12)) 
   ggsave(filename = paste0("../../part_1/figures/progress_",tec,"_",
                            target,".png"), plot = p1,
-         dpi = 1500, width = 12, height = 6)
+         dpi = 1600, width = 13, height = 7)
   
   
 }
@@ -265,12 +267,14 @@ sd_progress = function(target){
   for(cenario in cenario){
     dat[[cenario]] = gather_info(cenario, target) %>% 
       filter(tecnica == "brt", real > 0) %>% #just to select the data once not three times
-      mutate(datas = paste0(data," ",hora)) 
+      mutate(datas = paste0(data," ",hora))
+    
     dates = round_date(ymd_hms(dat[[cenario]]$datas),unit = "1 hour")
+    
     dat[[cenario]] = dat[[cenario]] %>% 
       mutate(datas = dates) %>% 
       group_by(datas) %>%
-      summarise(sd_real = (sd(real)/mean(real))) 
+      summarise(sd_real = 100*(sd(real)/mean(real))) 
     
     dat[[cenario]] = dat[[cenario]] %>% 
       mutate(hora = hour(datas), minuto = minute(datas), segundo = second(datas)) %>%
@@ -283,14 +287,21 @@ sd_progress = function(target){
                                  paste0("0",range_hour),range_hour))
   }
   
-  df = do.call(bind_rows, dat)
+  df = do.call(bind_rows, dat) %>% 
+    mutate(cenario = case_when(
+      cenario == "cenario_1" ~ "Cenário 1c",
+      cenario == "cenario_5" ~ "Cenário 2c",
+      cenario == "cenario_7" ~ "Cenário 3c",
+      cenario == "cenario_9" ~ "Cenário 4c",
+      TRUE ~ "erro"
+    ))
   
   if(target == "temp"){
     #br = 0.5
-    y_ax = "Homogeneidade"
+    y_ax = "Coeficiente de variação (%)"
   }else{
     #br = 2
-    y_ax = "Homogeneidade"
+    y_ax = "Coeficiente de variação (%)"
   }
   
   (p1 =  df %>%
@@ -300,8 +311,9 @@ sd_progress = function(target){
       scale_y_continuous(name=y_ax) +
       theme_classic() +
       theme(axis.text.x = element_text(size = 8,angle = 30))+
-      theme(axis.title.x = element_text(margin = margin(t = 8)))+
+      theme(axis.title.x = element_text(margin = margin(t = 10)))+
       theme(axis.title.y = element_text(margin = margin(r = 8))) +
+      labs(col="Cenário") + 
       theme(panel.background = element_rect(fill="white",
                                             size=0.5, linetype="solid", 
                                             colour ="black"))) 
@@ -316,13 +328,14 @@ sd_progress = function(target){
 alpha = data.frame(expand.grid(
   cenario = c("cenario_1","cenario_5","cenario_7","cenario_9"),
   target = c("temp","ur"),
-  tecnica = c("brt","svm","rf"))
+  tecnica = c(#"brt","svm",
+    "rf"))
 ) %>% 
   mutate_if(is.factor, as.character)
 alpha = split(alpha,list(alpha$cenario,alpha$target,alpha$tecnica), drop=TRUE)
 
 rec_list = lapply(alpha, function(x) Rec_plot(cenario = x[,"cenario"], target = x[,"target"]))
-progress_list = lapply(alpha, function(x) progress(target = x[,"target"],
+progress_list = lapply(alpha[c(1,5)], function(x) progress(target = x[,"target"],
                                                    tec = x[,"tecnica"]))
 boxplot_list = lapply(alpha, function(x) boxplot_progress(cenario = x[,"cenario"], target = x[,"target"]))
-sd_list = lapply(alpha, function(x) sd_progress( target = x[,"target"]))
+sd_list = lapply(alpha[c(1,5)], function(x) sd_progress( target = x[,"target"]))
